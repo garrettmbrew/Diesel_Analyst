@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diesel Desk | Market Analysis Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.10.0/umd/Recharts.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+    const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Legend } = Recharts;
+
+    // Theme
+    const theme = {
+      colors: {
+        bg: { primary: '#0f172a', secondary: '#1e293b', tertiary: '#334155', card: 'rgba(30, 41, 59, 0.6)' },
+        text: { primary: '#f8fafc', secondary: '#e2e8f0', muted: '#94a3b8', disabled: '#64748b' },
+        accent: { primary: '#f59e0b', secondary: '#ef4444', tertiary: '#3b82f6' },
+        semantic: { bullish: '#22c55e', bearish: '#ef4444', neutral: '#94a3b8', warning: '#f59e0b' },
+        border: { default: 'rgba(148, 163, 184, 0.1)' }
+      },
+      fonts: { mono: "'JetBrains Mono', monospace", sans: "'IBM Plex Sans', sans-serif" }
+    };
+
+    // Sample Data
+    const samplePrices = {
+      brent: { price: 74.82, change: -0.45, changePercent: -0.60 },
+      wti: { price: 71.23, change: -0.38, changePercent: -0.53 },
+      iceGasoil: { price: 698.50, change: 3.25, changePercent: 0.47 },
+      nymexUlsd: { price: 2.2845, change: 0.0124, changePercent: 0.55 }
+    };
+
+    const sampleNews = [
+      { id: 1, time: '06:42', headline: 'Phillips 66 Bayway refinery reports unit restart after maintenance', impact: 'bearish', region: 'USEC' },
+      { id: 2, time: '05:18', headline: 'Rhine river levels falling, barge freight rates rising', impact: 'bullish', region: 'NWE' },
+      { id: 3, time: '04:55', headline: 'China diesel exports remain subdued amid weak margins', impact: 'bullish', region: 'ASIA' },
+      { id: 4, time: '03:30', headline: 'Russian gasoil flows to Turkey steady despite sanctions', impact: 'neutral', region: 'MED' },
+      { id: 5, time: '02:15', headline: 'US trucking index shows 3% YoY decline in freight volumes', impact: 'bearish', region: 'US' },
+      { id: 6, time: '01:45', headline: 'Cold snap forecast for Northeast US next week, HDDs rising', impact: 'bullish', region: 'USEC' }
+    ];
+
+    const historicalData = [
+      { date: '2024-01', brent: 79.5, crack: 21.8 }, { date: '2024-02', brent: 81.2, crack: 23.2 },
+      { date: '2024-03', brent: 85.5, crack: 24.5 }, { date: '2024-04', brent: 88.2, crack: 25.8 },
+      { date: '2024-05', brent: 82.5, crack: 22.5 }, { date: '2024-06', brent: 78.8, crack: 19.8 },
+      { date: '2024-07', brent: 80.5, crack: 20.5 }, { date: '2024-08', brent: 79.2, crack: 19.2 },
+      { date: '2024-09', brent: 73.5, crack: 17.5 }, { date: '2024-10', brent: 74.8, crack: 18.2 },
+      { date: '2024-11', brent: 73.2, crack: 17.8 }, { date: '2024-12', brent: 74.8, crack: 18.4 }
+    ];
+
+    // Price Card Component
+    const PriceCard = ({ title, price, change, changePercent, unit, decimals = 2, onClick }) => {
+      const isPositive = change >= 0;
+      return (
+        <div onClick={onClick} style={{
+          background: theme.colors.bg.card, border: `1px solid ${theme.colors.border.default}`,
+          borderRadius: '8px', padding: '20px', cursor: 'pointer', transition: 'all 0.2s'
+        }}>
+          <div style={{ fontSize: '10px', fontWeight: 500, color: theme.colors.text.muted, letterSpacing: '1px', marginBottom: '8px', fontFamily: theme.fonts.mono }}>
+            {title}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginBottom: '8px' }}>
+            <span style={{ fontSize: '28px', fontWeight: 700, color: theme.colors.text.primary, fontFamily: theme.fonts.mono }}>
+              {price?.toFixed(decimals)}
+            </span>
+            <span style={{ fontSize: '12px', color: theme.colors.text.disabled }}>{unit}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontFamily: theme.fonts.mono,
+            color: isPositive ? theme.colors.semantic.bullish : theme.colors.semantic.bearish }}>
+            <span>{isPositive ? '▲' : '▼'}</span>
+            <span>{isPositive ? '+' : ''}{change?.toFixed(decimals)}</span>
+            <span style={{ opacity: 0.8 }}>({changePercent?.toFixed(2)}%)</span>
+          </div>
+        </div>
+      );
+    };
+
+    // Crack Card Component
+    const CrackCard = ({ title, value, change, onClick }) => {
+      const getSignal = (v) => {
+        if (v >= 25) return { label: 'Very Strong', color: theme.colors.semantic.bullish };
+        if (v >= 20) return { label: 'Strong', color: theme.colors.semantic.bullish };
+        if (v >= 15) return { label: 'Healthy', color: theme.colors.semantic.neutral };
+        if (v >= 10) return { label: 'Moderate', color: theme.colors.semantic.warning };
+        return { label: 'Weak', color: theme.colors.semantic.bearish };
+      };
+      const signal = getSignal(value);
+      const fillPercent = Math.min((value / 35) * 100, 100);
+      
+      return (
+        <div onClick={onClick} style={{
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%)',
+          border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '8px', padding: '20px', cursor: 'pointer'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 500, color: theme.colors.accent.primary, letterSpacing: '1px', fontFamily: theme.fonts.mono }}>{title}</div>
+            <div style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '999px', color: signal.color, background: `${signal.color}20` }}>{signal.label}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginBottom: '12px' }}>
+            <span style={{ fontSize: '32px', fontWeight: 700, color: theme.colors.text.primary, fontFamily: theme.fonts.mono }}>${value?.toFixed(2)}</span>
+            <span style={{ fontSize: '14px', color: theme.colors.text.muted }}>/bbl</span>
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ height: '6px', background: theme.colors.bg.primary, borderRadius: '999px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${fillPercent}%`, background: signal.color, borderRadius: '999px', transition: 'width 0.3s' }} />
+            </div>
+          </div>
+          <div style={{ fontSize: '10px', fontFamily: theme.fonts.mono, color: change >= 0 ? theme.colors.semantic.bullish : theme.colors.semantic.bearish }}>
+            {change >= 0 ? '+' : ''}{change?.toFixed(2)} vs yesterday
+          </div>
+        </div>
+      );
+    };
+
+    // Timespread Card
+    const TimespreadCard = ({ title, value, structure, onClick }) => {
+      const getColor = () => {
+        if (structure === 'backwardation') return theme.colors.semantic.warning;
+        if (structure === 'contango') return theme.colors.accent.tertiary;
+        return theme.colors.text.muted;
+      };
+      return (
+        <div onClick={onClick} style={{
+          background: theme.colors.bg.card, border: `1px solid ${theme.colors.border.default}`,
+          borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer'
+        }}>
+          <div style={{ fontSize: '10px', fontWeight: 500, color: theme.colors.text.muted, letterSpacing: '1px', marginBottom: '8px', fontFamily: theme.fonts.mono }}>{title}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: '2px', marginBottom: '8px' }}>
+            <span style={{ fontSize: '20px', fontWeight: 700, color: theme.colors.text.primary, fontFamily: theme.fonts.mono }}>{value >= 0 ? '+' : ''}</span>
+            <span style={{ fontSize: '28px', fontWeight: 700, color: theme.colors.text.primary, fontFamily: theme.fonts.mono }}>${Math.abs(value)?.toFixed(2)}</span>
+          </div>
+          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: getColor(), marginBottom: '4px' }}>{structure?.toUpperCase()}</div>
+          <div style={{ fontSize: '10px', color: theme.colors.text.disabled }}>
+            {structure === 'backwardation' ? 'Front > Back — Tight market' : structure === 'contango' ? 'Front < Back — Oversupplied' : 'Balanced market'}
+          </div>
+        </div>
+      );
+    };
+
+    // News Feed
+    const NewsFeed = ({ news }) => {
+      const getImpactColor = (impact) => {
+        if (impact === 'bullish') return theme.colors.semantic.bullish;
+        if (impact === 'bearish') return theme.colors.semantic.bearish;
+        return theme.colors.semantic.neutral;
+      };
+      return (
+        <div style={{ background: theme.colors.bg.card, border: `1px solid ${theme.colors.border.default}`, borderRadius: '8px', overflow: 'hidden' }}>
+          {news.map((item, i) => (
+            <div key={item.id} style={{
+              display: 'grid', gridTemplateColumns: '60px 1fr 80px', gap: '16px', alignItems: 'center',
+              padding: '16px 20px', borderBottom: i < news.length - 1 ? `1px solid ${theme.colors.border.default}` : 'none', cursor: 'pointer'
+            }}>
+              <span style={{ fontSize: '12px', color: theme.colors.text.disabled, fontFamily: theme.fonts.mono }}>{item.time}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                <span style={{ fontSize: '10px', fontWeight: 600, color: theme.colors.accent.tertiary, background: `${theme.colors.accent.tertiary}20`, padding: '4px 8px', borderRadius: '4px', flexShrink: 0 }}>{item.region}</span>
+                <span style={{ fontSize: '12px', color: theme.colors.text.secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.headline}</span>
+              </div>
+              <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textAlign: 'right', color: getImpactColor(item.impact) }}>{item.impact.toUpperCase()}</span>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    // Modal Component
+    const Modal = ({ isOpen, onClose, title, subtitle, children }) => {
+      useEffect(() => {
+        const handleEscape = (e) => { if (e.key === 'Escape') onClose(); };
+        if (isOpen) {
+          document.addEventListener('keydown', handleEscape);
+          document.body.style.overflow = 'hidden';
+        }
+        return () => { document.removeEventListener('keydown', handleEscape); document.body.style.overflow = 'unset'; };
+      }, [isOpen, onClose]);
+      
+      if (!isOpen) return null;
+      return (
+        <div onClick={onClose} style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', backdropFilter: 'blur(4px)'
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: theme.colors.bg.secondary, borderRadius: '12px', border: `1px solid ${theme.colors.border.default}`,
+            width: '100%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '24px', borderBottom: `1px solid ${theme.colors.border.default}` }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: theme.colors.text.primary }}>{title}</h2>
+                {subtitle && <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: theme.colors.text.muted }}>{subtitle}</p>}
+              </div>
+              <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: theme.colors.text.muted, cursor: 'pointer', padding: '8px', fontSize: '20px' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>{children}</div>
+          </div>
+        </div>
+      );
+    };
+
+    // Price DrillDown
+    const PriceDrillDown = () => (
+      <div>
+        <div style={{ background: theme.colors.bg.card, borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600, color: theme.colors.text.primary }}>12-Month Price History</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={historicalData}>
+              <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border.default} />
+              <XAxis dataKey="date" stroke={theme.colors.text.muted} tick={{ fill: theme.colors.text.muted, fontSize: 11 }} />
+              <YAxis stroke={theme.colors.text.muted} tick={{ fill: theme.colors.text.muted, fontSize: 11 }} />
+              <Tooltip contentStyle={{ background: theme.colors.bg.primary, border: `1px solid ${theme.colors.border.default}`, borderRadius: '8px' }} />
+              <Line type="monotone" dataKey="brent" stroke={theme.colors.accent.tertiary} strokeWidth={2} dot={false} name="Brent" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+          {[{ label: '52-Week High', value: '$92.50', sub: 'Sep 2023' }, { label: '52-Week Low', value: '$70.20', sub: 'Jun 2023' },
+            { label: '200-Day MA', value: '$79.85', sub: '-6.3% vs current' }, { label: 'YTD Change', value: '-8.2%', sub: 'From $81.50' }].map(item => (
+            <div key={item.label} style={{ background: theme.colors.bg.card, borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: theme.colors.text.muted, marginBottom: '8px' }}>{item.label}</div>
+              <div style={{ fontSize: '24px', fontWeight: 700, color: theme.colors.text.primary, fontFamily: theme.fonts.mono }}>{item.value}</div>
+              <div style={{ fontSize: '10px', color: theme.colors.text.disabled, marginTop: '4px' }}>{item.sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+
+    // Crack DrillDown
+    const CrackDrillDown = () => (
+      <div>
+        <div style={{ background: theme.colors.bg.card, borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
+          <h3 style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600, color: theme.colors.text.primary }}>Crack Spread History ($/bbl)</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <AreaChart data={historicalData}>
+              <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border.default} />
+              <XAxis dataKey="date" stroke={theme.colors.text.muted} tick={{ fill: theme.colors.text.muted, fontSize: 11 }} />
+              <YAxis stroke={theme.colors.text.muted} tick={{ fill: theme.colors.text.muted, fontSize: 11 }} domain={[0, 30]} />
+              <Tooltip contentStyle={{ background: theme.colors.bg.primary, border: `1px solid ${theme.colors.border.default}`, borderRadius: '8px' }} />
+              <Area type="monotone" dataKey="crack" stroke={theme.colors.accent.primary} fill={`${theme.colors.accent.primary}20`} strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+          {[{ label: 'Very Strong', value: '>$25/bbl', color: theme.colors.semantic.bullish },
+            { label: 'Strong', value: '$20-25/bbl', color: theme.colors.semantic.bullish },
+            { label: 'Healthy', value: '$15-20/bbl', color: theme.colors.semantic.warning },
+            { label: 'Weak', value: '<$10/bbl', color: theme.colors.semantic.bearish }].map(item => (
+            <div key={item.label} style={{ background: theme.colors.bg.card, borderRadius: '8px', padding: '16px', textAlign: 'center', borderLeft: `3px solid ${item.color}` }}>
+              <div style={{ fontSize: '10px', color: theme.colors.text.muted, marginBottom: '4px' }}>{item.label}</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: theme.colors.text.primary, fontFamily: theme.fonts.mono }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: theme.colors.bg.card, borderRadius: '8px', padding: '20px', borderLeft: `3px solid ${theme.colors.accent.primary}` }}>
+          <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600, color: theme.colors.text.primary }}>Why Crack Spreads Matter</h4>
+          <p style={{ margin: 0, fontSize: '13px', color: theme.colors.text.secondary, lineHeight: 1.6 }}>
+            Crack spreads measure refining profitability. Strong cracks (&gt;$20/bbl) signal tight product markets and incentivize max refinery runs. 
+            Weak cracks (&lt;$10/bbl) lead to run cuts. Refiner equities (VLO, MPC, PSX) are leveraged plays on crack spreads — 
+            when cracks are strong, these stocks outperform; when weak, they underperform.
+          </p>
+        </div>
+      </div>
+    );
+
+    // Main Dashboard
+    const Dashboard = () => {
+      const [prices, setPrices] = useState(samplePrices);
+      const [activeModal, setActiveModal] = useState(null);
+      const [lastUpdate, setLastUpdate] = useState(new Date());
+
+      // Simulate price updates
+      useEffect(() => {
+        const interval = setInterval(() => {
+          setPrices(prev => ({
+            brent: { ...prev.brent, price: prev.brent.price + (Math.random() - 0.5) * 0.2 },
+            wti: { ...prev.wti, price: prev.wti.price + (Math.random() - 0.5) * 0.2 },
+            iceGasoil: { ...prev.iceGasoil, price: prev.iceGasoil.price + (Math.random() - 0.5) * 2 },
+            nymexUlsd: { ...prev.nymexUlsd, price: prev.nymexUlsd.price + (Math.random() - 0.5) * 0.005 }
+          }));
+          setLastUpdate(new Date());
+        }, 30000);
+        return () => clearInterval(interval);
+      }, []);
+
+      // Calculate crack
+      const gasoilCrack = (prices.iceGasoil.price / 7.45) - prices.brent.price;
+
+      return (
+        <div style={{ minHeight: '100vh' }}>
+          {/* Header */}
+          <header style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 32px',
+            borderBottom: `1px solid ${theme.colors.border.default}`, background: `${theme.colors.bg.primary}cc`, backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 100
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px' }}>
+              <h1 style={{
+                margin: 0, fontSize: '28px', fontWeight: 700, letterSpacing: '4px', fontFamily: theme.fonts.mono,
+                background: `linear-gradient(90deg, ${theme.colors.accent.primary}, ${theme.colors.accent.secondary})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent'
+              }}>DIESEL DESK</h1>
+              <span style={{ color: theme.colors.text.disabled, fontSize: '12px', letterSpacing: '2px' }}>Market Fundamentals Monitor</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <span style={{ color: theme.colors.text.disabled, fontSize: '12px', fontFamily: theme.fonts.mono }}>
+                Last update: {lastUpdate.toLocaleTimeString()}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: theme.colors.semantic.bullish, fontSize: '12px', fontWeight: 600, letterSpacing: '1px' }}>
+                <span style={{ animation: 'pulse 2s infinite' }}>●</span> LIVE
+              </div>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <main style={{ padding: '32px', maxWidth: '1400px', margin: '0 auto' }}>
+            {/* Benchmark Prices */}
+            <section style={{ marginBottom: '40px' }}>
+              <h2 style={{
+                margin: '0 0 20px 0', fontSize: '12px', fontWeight: 600, letterSpacing: '3px', color: theme.colors.text.muted,
+                borderBottom: `1px solid ${theme.colors.border.default}`, paddingBottom: '12px', fontFamily: theme.fonts.mono
+              }}>BENCHMARK PRICES</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                <PriceCard title="ICE Brent (M1)" price={prices.brent.price} change={prices.brent.change} changePercent={prices.brent.changePercent} unit="$/bbl" onClick={() => setActiveModal('price')} />
+                <PriceCard title="NYMEX WTI (M1)" price={prices.wti.price} change={prices.wti.change} changePercent={prices.wti.changePercent} unit="$/bbl" onClick={() => setActiveModal('price')} />
+                <PriceCard title="ICE Gasoil (M1)" price={prices.iceGasoil.price} change={prices.iceGasoil.change} changePercent={prices.iceGasoil.changePercent} unit="$/mt" onClick={() => setActiveModal('price')} />
+                <PriceCard title="NYMEX ULSD (M1)" price={prices.nymexUlsd.price} change={prices.nymexUlsd.change} changePercent={prices.nymexUlsd.changePercent} unit="$/gal" decimals={4} onClick={() => setActiveModal('price')} />
+              </div>
+            </section>
+
+            {/* Crack Spreads */}
+            <section style={{ marginBottom: '40px' }}>
+              <h2 style={{
+                margin: '0 0 20px 0', fontSize: '12px', fontWeight: 600, letterSpacing: '3px', color: theme.colors.text.muted,
+                borderBottom: `1px solid ${theme.colors.border.default}`, paddingBottom: '12px', fontFamily: theme.fonts.mono
+              }}>CRACK SPREADS & TIMESPREADS</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <CrackCard title="Gasoil vs Brent" value={gasoilCrack} change={0.85} onClick={() => setActiveModal('crack')} />
+                <CrackCard title="ULSD vs WTI" value={24.56} change={0.92} onClick={() => setActiveModal('crack')} />
+                <TimespreadCard title="Gasoil M1/M2 Spread" value={2.75} structure="backwardation" onClick={() => setActiveModal('timespread')} />
+              </div>
+            </section>
+
+            {/* News Feed */}
+            <section style={{ marginBottom: '40px' }}>
+              <h2 style={{
+                margin: '0 0 20px 0', fontSize: '12px', fontWeight: 600, letterSpacing: '3px', color: theme.colors.text.muted,
+                borderBottom: `1px solid ${theme.colors.border.default}`, paddingBottom: '12px', fontFamily: theme.fonts.mono
+              }}>MARKET INTELLIGENCE</h2>
+              <NewsFeed news={sampleNews} />
+            </section>
+          </main>
+
+          {/* Footer */}
+          <footer style={{
+            padding: '20px 32px', borderTop: `1px solid ${theme.colors.border.default}`,
+            display: 'flex', justifyContent: 'space-between', color: theme.colors.text.disabled, fontSize: '10px', letterSpacing: '1px'
+          }}>
+            <div>Built for the diesel desk | Data refresh: 30s</div>
+            <div>Click any card to drill down | Prices indicative only</div>
+          </footer>
+
+          {/* Modals */}
+          <Modal isOpen={activeModal === 'price'} onClose={() => setActiveModal(null)} title="Price Analysis" subtitle="Historical prices, correlations, and volatility metrics">
+            <PriceDrillDown />
+          </Modal>
+          <Modal isOpen={activeModal === 'crack'} onClose={() => setActiveModal(null)} title="Crack Spread Analysis" subtitle="Refining margins, historical patterns, and equity correlations">
+            <CrackDrillDown />
+          </Modal>
+          <Modal isOpen={activeModal === 'timespread'} onClose={() => setActiveModal(null)} title="Timespread Analysis" subtitle="Forward curve structure and storage economics">
+            <div style={{ background: theme.colors.bg.card, borderRadius: '8px', padding: '20px', borderLeft: `3px solid ${theme.colors.accent.primary}` }}>
+              <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 600, color: theme.colors.text.primary }}>Understanding Timespreads</h4>
+              <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: theme.colors.text.secondary, lineHeight: 1.6 }}>
+                <strong>Backwardation (Front &gt; Back):</strong> Tight market. Buyers pay premium for immediate delivery. Rolling longs costs money.
+              </p>
+              <p style={{ margin: 0, fontSize: '13px', color: theme.colors.text.secondary, lineHeight: 1.6 }}>
+                <strong>Contango (Front &lt; Back):</strong> Oversupplied. No urgency to buy now. Storage plays attractive. Rolling longs generates carry.
+              </p>
+            </div>
+          </Modal>
+        </div>
+      );
+    };
+
+    // Render
+    ReactDOM.createRoot(document.getElementById('root')).render(<Dashboard />);
+  </script>
+</body>
+</html>
