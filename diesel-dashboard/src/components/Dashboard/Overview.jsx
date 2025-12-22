@@ -14,6 +14,7 @@ import PriceDrillDown from '../DrillDowns/PriceDrillDown';
 import CrackDrillDown from '../DrillDowns/CrackDrillDown';
 import InventoryDrillDown from '../DrillDowns/InventoryDrillDown';
 import TimespreadDrillDown from '../DrillDowns/TimespreadDrillDown';
+import ArbDrillDown from '../DrillDowns/ArbDrillDown';
 
 /**
  * Main dashboard overview component
@@ -214,6 +215,16 @@ export const Overview = () => {
         size="large"
       >
         <TimespreadDrillDown />
+      </Modal>
+
+      <Modal
+        isOpen={activeModal === 'arb'}
+        onClose={closeDrillDown}
+        title="Arbitrage Analysis"
+        subtitle="Regional spreads, freight economics, and trade flows"
+        size="large"
+      >
+        <ArbDrillDown />
       </Modal>
     </div>
   );
