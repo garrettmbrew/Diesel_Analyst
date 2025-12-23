@@ -22,9 +22,15 @@ export const FRED_SERIES = {
 
 // EIA Product Codes
 export const EIA_PRODUCTS = {
-  DISTILLATE: 'EPD',      // Distillate fuel oil
+  DISTILLATE: 'EPD0',     // Distillate fuel oil (total)
   CRUDE: 'EPC0',          // Crude oil
   GASOLINE: 'EPM0',       // Motor gasoline
+};
+
+// EIA Process Codes
+export const EIA_PROCESS = {
+  ENDING_STOCKS: 'SAE',   // Ending Stocks
+  PRODUCTION: 'YPR',      // Production
 };
 
 // EIA Area Codes

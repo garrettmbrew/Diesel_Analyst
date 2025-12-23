@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { API_ENDPOINTS, EIA_PRODUCTS, EIA_AREAS } from '../utils/constants';
+import { API_ENDPOINTS, EIA_PRODUCTS, EIA_AREAS, EIA_PROCESS } from '../utils/constants';
 import { sampleEIAData } from '../data/sampleData';
 
 /**
@@ -31,6 +31,7 @@ export const useEIAData = () => {
       url.searchParams.append('data[0]', 'value');
       url.searchParams.append('facets[product][]', EIA_PRODUCTS.DISTILLATE);
       url.searchParams.append('facets[duoarea][]', EIA_AREAS.US_TOTAL);
+      url.searchParams.append('facets[process][]', EIA_PROCESS.ENDING_STOCKS);
       url.searchParams.append('sort[0][column]', 'period');
       url.searchParams.append('sort[0][direction]', 'desc');
       url.searchParams.append('length', '52'); // Last year of weekly data
@@ -60,7 +61,7 @@ export const useEIAData = () => {
     }
   }, [apiKey]);
 
-  // Fetch PADD breakdown
+  // Fetch PADD breakdown with historical data
   const fetchPaddBreakdown = useCallback(async () => {
     if (!apiKey) {
       return null;
@@ -68,32 +69,40 @@ export const useEIAData = () => {
 
     try {
       const paddAreas = [
-        EIA_AREAS.PADD1,
-        EIA_AREAS.PADD2,
-        EIA_AREAS.PADD3,
-        EIA_AREAS.PADD4,
-        EIA_AREAS.PADD5,
+        { code: EIA_AREAS.PADD1, name: 'PADD 1 - East Coast' },
+        { code: EIA_AREAS.PADD2, name: 'PADD 2 - Midwest' },
+        { code: EIA_AREAS.PADD3, name: 'PADD 3 - Gulf Coast' },
+        { code: EIA_AREAS.PADD4, name: 'PADD 4 - Rocky Mountain' },
+        { code: EIA_AREAS.PADD5, name: 'PADD 5 - West Coast' },
       ];
 
       const results = await Promise.all(
-        paddAreas.map(async (area) => {
+        paddAreas.map(async ({ code, name }) => {
           const url = new URL(`${API_ENDPOINTS.EIA.BASE}${API_ENDPOINTS.EIA.WEEKLY_STOCKS}`);
           url.searchParams.append('api_key', apiKey);
           url.searchParams.append('frequency', 'weekly');
           url.searchParams.append('data[0]', 'value');
           url.searchParams.append('facets[product][]', EIA_PRODUCTS.DISTILLATE);
-          url.searchParams.append('facets[duoarea][]', area);
+          url.searchParams.append('facets[duoarea][]', code);
+          url.searchParams.append('facets[process][]', EIA_PROCESS.ENDING_STOCKS);
           url.searchParams.append('sort[0][column]', 'period');
           url.searchParams.append('sort[0][direction]', 'desc');
-          url.searchParams.append('length', '1');
+          url.searchParams.append('length', '52'); // Full year of weekly data
 
           const response = await fetch(url.toString());
           const data = await response.json();
           
+          const history = data.response?.data?.map(item => ({
+            week: item.period,
+            value: parseInt(item.value),
+          })) || [];
+
           return {
-            padd: area,
-            value: data.response?.data?.[0]?.value || null,
-            period: data.response?.data?.[0]?.period || null,
+            padd: code,
+            name: name,
+            value: history[0]?.value || null,
+            period: history[0]?.week || null,
+            history: history,
           };
         })
       );

@@ -1,11 +1,17 @@
 import React from 'react';
 import { theme } from '../../styles/theme';
 import { formatRelativeTime } from '../../utils/formatters';
+import { SourceIndicator } from '../Common/SourceBadge';
 
 /**
  * News feed component with impact tagging
  */
-export const NewsFeed = ({ news = [], maxItems = 6 }) => {
+export const NewsFeed = ({ 
+  news = [], 
+  maxItems = 6,
+  isLive = false,
+  source = 'Sample',
+}) => {
   const getImpactColor = (impact) => {
     switch (impact) {
       case 'bullish':
@@ -19,6 +25,10 @@ export const NewsFeed = ({ news = [], maxItems = 6 }) => {
 
   return (
     <div style={styles.container}>
+      <div style={styles.header}>
+        <span style={styles.headerTitle}>NEWS FEED</span>
+        <SourceIndicator isLive={isLive} source={source} />
+      </div>
       {news.slice(0, maxItems).map((item) => (
         <div key={item.id} style={styles.item}>
           <div style={styles.time}>{item.time}</div>
@@ -46,6 +56,20 @@ const styles = {
     border: `1px solid ${theme.colors.border.default}`,
     borderRadius: theme.radius.md,
     overflow: 'hidden',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 20px',
+    borderBottom: `1px solid ${theme.colors.border.default}`,
+    background: theme.colors.background.secondary,
+  },
+  headerTitle: {
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.semibold,
+    color: theme.colors.text.muted,
+    letterSpacing: '2px',
   },
   item: {
     display: 'grid',

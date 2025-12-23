@@ -3,6 +3,7 @@ import { RefreshCw, Activity } from 'lucide-react';
 import { theme } from '../../styles/theme';
 import { useMarketData } from '../../hooks/useMarketData';
 import { formatTime } from '../../utils/formatters';
+import { FRED_SERIES } from '../../utils/constants';
 
 import PriceCard from './PriceCard';
 import CrackCard from './CrackCard';
@@ -15,6 +16,14 @@ import CrackDrillDown from '../DrillDowns/CrackDrillDown';
 import InventoryDrillDown from '../DrillDowns/InventoryDrillDown';
 import TimespreadDrillDown from '../DrillDowns/TimespreadDrillDown';
 import ArbDrillDown from '../DrillDowns/ArbDrillDown';
+
+// FRED data URLs for QA/QC verification
+const FRED_URLS = {
+  BRENT: `https://fred.stlouisfed.org/series/${FRED_SERIES.BRENT}`,
+  WTI: `https://fred.stlouisfed.org/series/${FRED_SERIES.WTI}`,
+  DIESEL_GULF: `https://fred.stlouisfed.org/series/${FRED_SERIES.DIESEL_GULF}`,
+  DIESEL_NYH: `https://fred.stlouisfed.org/series/${FRED_SERIES.DIESEL_NYH}`,
+};
 
 /**
  * Main dashboard overview component
@@ -29,7 +38,9 @@ export const Overview = () => {
     news, 
     loading, 
     lastUpdate, 
-    refresh 
+    refresh,
+    dataSource,
+    hasFredKey,
   } = useMarketData();
 
   const [activeModal, setActiveModal] = useState(null);
@@ -69,9 +80,12 @@ export const Overview = () => {
           <div style={styles.updateTime}>
             Last update: {lastUpdate ? formatTime(lastUpdate) : '-'}
           </div>
+          <div style={styles.dataSourceBadge}>
+            {dataSource || 'Sample'}
+          </div>
           <div style={styles.marketStatus}>
             <Activity size={12} style={styles.statusIcon} />
-            LIVE
+            {hasFredKey ? 'LIVE' : 'DEMO'}
           </div>
         </div>
       </header>
@@ -109,6 +123,10 @@ export const Overview = () => {
               changePercent={prices?.brent?.changePercent}
               unit="$/bbl"
               onClick={() => openDrillDown('price', { product: 'brent' })}
+              isLive={hasFredKey}
+              source={hasFredKey ? 'FRED: DCOILBRENTEU' : 'Sample Data'}
+              dataUrl={FRED_URLS.BRENT}
+              dataDate={prices?.brent?.date}
             />
             <PriceCard
               title="NYMEX WTI (M1)"
@@ -117,6 +135,10 @@ export const Overview = () => {
               changePercent={prices?.wti?.changePercent}
               unit="$/bbl"
               onClick={() => openDrillDown('price', { product: 'wti' })}
+              isLive={hasFredKey}
+              source={hasFredKey ? 'FRED: DCOILWTICO' : 'Sample Data'}
+              dataUrl={FRED_URLS.WTI}
+              dataDate={prices?.wti?.date}
             />
             <PriceCard
               title="ICE Gasoil (M1)"
@@ -125,6 +147,10 @@ export const Overview = () => {
               changePercent={prices?.iceGasoil?.changePercent}
               unit="$/mt"
               onClick={() => openDrillDown('price', { product: 'gasoil' })}
+              isLive={false}
+              source="Derived from Brent"
+              dataUrl={null}
+              dataDate={hasFredKey ? prices?.iceGasoil?.date : null}
             />
             <PriceCard
               title="NYMEX ULSD (M1)"
@@ -134,6 +160,10 @@ export const Overview = () => {
               unit="$/gal"
               decimals={4}
               onClick={() => openDrillDown('price', { product: 'ulsd' })}
+              isLive={hasFredKey}
+              source={hasFredKey ? 'FRED: DDFUELUSGULF' : 'Sample Data'}
+              dataUrl={FRED_URLS.DIESEL_GULF}
+              dataDate={prices?.nymexUlsd?.date}
             />
           </div>
         </section>
@@ -147,18 +177,26 @@ export const Overview = () => {
               value={cracks?.gasoilBrent?.value}
               change={cracks?.gasoilBrent?.change}
               onClick={() => openDrillDown('crack', { spread: 'gasoil' })}
+              isLive={hasFredKey}
+              source={hasFredKey ? 'Calculated from FRED' : 'Calculated from Sample'}
+              dataDate={prices?.brent?.date}
             />
             <CrackCard
               title="ULSD vs WTI"
               value={cracks?.ulsdWti?.value}
               change={cracks?.ulsdWti?.change}
               onClick={() => openDrillDown('crack', { spread: 'ulsd' })}
+              isLive={hasFredKey}
+              source={hasFredKey ? 'Calculated from FRED' : 'Calculated from Sample'}
+              dataDate={prices?.wti?.date}
             />
             <TimespreadCard
               title="Gasoil M1/M2 Spread"
               value={timespreads?.gasoilM1M2?.value}
               structure={timespreads?.gasoilM1M2?.structure}
               onClick={() => openDrillDown('timespread')}
+              isLive={false}
+              source="Sample Data"
             />
           </div>
         </section>
@@ -166,7 +204,11 @@ export const Overview = () => {
         {/* News Feed */}
         <section style={styles.section}>
           <h2 style={styles.sectionTitle}>MARKET INTELLIGENCE</h2>
-          <NewsFeed news={news} />
+          <NewsFeed 
+            news={news} 
+            isLive={false}
+            source="Sample Headlines"
+          />
         </section>
       </main>
 
@@ -184,7 +226,11 @@ export const Overview = () => {
         subtitle={`Detailed view for ${modalData?.product || 'selected product'}`}
         size="large"
       >
-        <PriceDrillDown product={modalData?.product} />
+        <PriceDrillDown 
+          product={modalData?.product} 
+          hasFredKey={hasFredKey} 
+          priceDate={prices?.[modalData?.product]?.date || prices?.brent?.date}
+        />
       </Modal>
 
       <Modal
@@ -194,7 +240,7 @@ export const Overview = () => {
         subtitle="Refining margins, historical patterns, and equity correlations"
         size="large"
       >
-        <CrackDrillDown spread={modalData?.spread} />
+        <CrackDrillDown spread={modalData?.spread} hasFredKey={hasFredKey} priceDate={prices?.brent?.date} />
       </Modal>
 
       <Modal
@@ -312,6 +358,15 @@ const styles = {
     color: theme.colors.text.disabled,
     fontSize: theme.fontSizes.sm,
     fontFamily: theme.fonts.mono,
+  },
+  dataSourceBadge: {
+    padding: '4px 10px',
+    background: `${theme.colors.accent.primary}20`,
+    color: theme.colors.accent.primary,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.semibold,
+    borderRadius: theme.radius.full,
+    letterSpacing: '0.5px',
   },
   marketStatus: {
     display: 'flex',

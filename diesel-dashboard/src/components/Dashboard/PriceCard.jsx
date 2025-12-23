@@ -2,6 +2,7 @@ import React from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { theme } from '../../styles/theme';
 import { formatPrice, formatPercent } from '../../utils/formatters';
+import { SourceIndicator } from '../Common/SourceBadge';
 
 /**
  * Price display card for benchmark prices
@@ -14,6 +15,10 @@ export const PriceCard = ({
   unit = '',
   decimals = 2,
   onClick,
+  isLive = false,
+  source = 'Sample',
+  dataUrl = null,
+  dataDate = null,
 }) => {
   const isPositive = change >= 0;
   const TrendIcon = isPositive ? TrendingUp : TrendingDown;
@@ -28,7 +33,10 @@ export const PriceCard = ({
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
     >
-      <div style={styles.label}>{title}</div>
+      <div style={styles.header}>
+        <div style={styles.label}>{title}</div>
+        <SourceIndicator isLive={isLive} source={source} dataUrl={dataUrl} />
+      </div>
       
       <div style={styles.priceRow}>
         <span style={styles.price}>
@@ -46,6 +54,12 @@ export const PriceCard = ({
           ({formatPercent(changePercent, 2, false)})
         </span>
       </div>
+
+      {dataDate && (
+        <div style={styles.dataDate}>
+          Data as of: {dataDate}
+        </div>
+      )}
     </div>
   );
 };
@@ -63,12 +77,23 @@ const styles = {
       background: theme.colors.background.cardHover,
     },
   },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px',
+  },
   label: {
     fontSize: theme.fontSizes.xs,
     fontWeight: theme.fontWeights.medium,
     color: theme.colors.text.muted,
     letterSpacing: '1px',
-    marginBottom: '8px',
+    fontFamily: theme.fonts.mono,
+  },
+  dataDate: {
+    fontSize: '9px',
+    color: theme.colors.text.disabled,
+    marginTop: '8px',
     fontFamily: theme.fonts.mono,
   },
   priceRow: {

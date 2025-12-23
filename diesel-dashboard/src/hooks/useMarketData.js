@@ -8,13 +8,14 @@ import {
   sampleNews,
 } from '../data/sampleData';
 import { calcGasoilCrack, calcUlsdCrack, calc321Crack } from '../utils/calculations';
+import { useFREDData } from './useFREDData';
 
 /**
  * Main hook for fetching and managing market data
- * In production, this would connect to live data feeds
- * Currently uses sample data with simulated updates
+ * Uses FRED API for live price data when API key is available
+ * Falls back to sample data with simulated updates
  */
-export const useMarketData = (refreshInterval = 30000) => {
+export const useMarketData = (refreshInterval = 60000) => {
   const [prices, setPrices] = useState(null);
   const [cracks, setCracks] = useState(null);
   const [timespreads, setTimespreads] = useState(null);
@@ -24,44 +25,87 @@ export const useMarketData = (refreshInterval = 30000) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [dataSource, setDataSource] = useState('sample');
 
-  // Simulate small price movements for demo purposes
-  const simulatePriceMovement = useCallback((basePrice, volatility = 0.002) => {
-    const change = (Math.random() - 0.5) * 2 * volatility * basePrice;
-    return basePrice + change;
-  }, []);
+  // Get FRED data
+  const { 
+    brentPrice, 
+    wtiPrice, 
+    dieselGulf, 
+    dieselNYH,
+    hasApiKey: hasFredKey,
+    refresh: refreshFred,
+    loading: fredLoading,
+  } = useFREDData();
+
+  // Build prices from FRED data or fall back to sample
+  const buildPrices = useCallback(() => {
+    // Check if we have FRED data
+    if (hasFredKey && brentPrice && wtiPrice) {
+      setDataSource('FRED API');
+      
+      // Use FRED data for crude prices
+      // Note: FRED doesn't have ICE Gasoil or NYMEX ULSD futures directly
+      // We use diesel Gulf as a proxy for ULSD, with conversion
+      const ulsdPrice = dieselGulf?.price || dieselNYH?.price || samplePrices.nymexUlsd.price;
+      
+      return {
+        brent: {
+          price: brentPrice.price,
+          change: brentPrice.change,
+          changePercent: brentPrice.changePercent,
+          high: brentPrice.high,
+          low: brentPrice.low,
+          date: brentPrice.date,
+        },
+        wti: {
+          price: wtiPrice.price,
+          change: wtiPrice.change,
+          changePercent: wtiPrice.changePercent,
+          high: wtiPrice.high,
+          low: wtiPrice.low,
+          date: wtiPrice.date,
+        },
+        iceGasoil: {
+          // Estimate ICE Gasoil from Brent + typical crack spread
+          // In reality, would need ICE data feed
+          price: (brentPrice.price + 18) * 7.45, // Convert to $/mt approximation
+          change: brentPrice.change * 7.45,
+          changePercent: brentPrice.changePercent,
+          high: (brentPrice.high + 18) * 7.45,
+          low: (brentPrice.low + 18) * 7.45,
+          date: brentPrice.date, // Derived from Brent
+        },
+        nymexUlsd: {
+          price: ulsdPrice,
+          change: dieselGulf?.change || samplePrices.nymexUlsd.change,
+          changePercent: dieselGulf?.changePercent || samplePrices.nymexUlsd.changePercent,
+          high: dieselGulf?.high || samplePrices.nymexUlsd.high,
+          low: dieselGulf?.low || samplePrices.nymexUlsd.low,
+          date: dieselGulf?.date || null,
+        },
+        rbob: {
+          // RBOB not in FRED, use sample with adjustment based on crude move
+          price: samplePrices.rbob.price * (1 + (brentPrice.changePercent / 100)),
+          change: samplePrices.rbob.change,
+          changePercent: brentPrice.changePercent,
+          high: samplePrices.rbob.high,
+          low: samplePrices.rbob.low,
+        },
+      };
+    }
+    
+    // Fallback to sample data
+    setDataSource('Sample Data');
+    return samplePrices;
+  }, [hasFredKey, brentPrice, wtiPrice, dieselGulf, dieselNYH]);
 
   // Fetch/update market data
   const fetchData = useCallback(async () => {
     try {
-      // In production, replace with actual API calls:
-      // const priceData = await fetch('https://api.example.com/prices');
-      
-      // Simulate price updates with small random movements
-      const updatedPrices = {
-        brent: {
-          ...samplePrices.brent,
-          price: simulatePriceMovement(samplePrices.brent.price),
-        },
-        wti: {
-          ...samplePrices.wti,
-          price: simulatePriceMovement(samplePrices.wti.price),
-        },
-        iceGasoil: {
-          ...samplePrices.iceGasoil,
-          price: simulatePriceMovement(samplePrices.iceGasoil.price, 0.003),
-        },
-        nymexUlsd: {
-          ...samplePrices.nymexUlsd,
-          price: simulatePriceMovement(samplePrices.nymexUlsd.price, 0.003),
-        },
-        rbob: {
-          ...samplePrices.rbob,
-          price: simulatePriceMovement(samplePrices.rbob.price, 0.003),
-        },
-      };
+      const updatedPrices = buildPrices();
 
-      // Recalculate cracks based on updated prices
+      // Calculate cracks based on current prices
       const gasoilCrack = calcGasoilCrack(updatedPrices.iceGasoil.price, updatedPrices.brent.price);
       const ulsdCrack = calcUlsdCrack(updatedPrices.nymexUlsd.price, updatedPrices.wti.price);
       const crack321 = calc321Crack(
@@ -97,26 +141,29 @@ export const useMarketData = (refreshInterval = 30000) => {
       setError(err.message);
       setLoading(false);
     }
-  }, [simulatePriceMovement]);
+  }, [buildPrices]);
 
-  // Initial fetch
+  // Initial fetch and when FRED data updates
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, brentPrice, wtiPrice]);
 
   // Set up refresh interval
   useEffect(() => {
     if (refreshInterval > 0) {
-      const interval = setInterval(fetchData, refreshInterval);
+      const interval = setInterval(() => {
+        refreshFred();
+      }, refreshInterval);
       return () => clearInterval(interval);
     }
-  }, [refreshInterval, fetchData]);
+  }, [refreshInterval, refreshFred]);
 
   // Manual refresh function
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     setLoading(true);
+    await refreshFred();
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, refreshFred]);
 
   return {
     prices,
@@ -125,10 +172,12 @@ export const useMarketData = (refreshInterval = 30000) => {
     inventories,
     arbs,
     news,
-    loading,
+    loading: loading || fredLoading,
     error,
     lastUpdate,
     refresh,
+    dataSource,
+    hasFredKey,
   };
 };
 

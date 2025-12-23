@@ -3,7 +3,13 @@ import { theme } from '../../styles/theme';
 import { Tabs, TabPanel } from '../Common/Tabs';
 import { sampleArbs } from '../../data/sampleData';
 import { ARB_ROUTES } from '../../utils/constants';
-import { Ship, DollarSign, TrendingUp } from 'lucide-react';
+import { Ship, DollarSign, TrendingUp, ExternalLink, AlertCircle } from 'lucide-react';
+
+// Data source URLs for verification
+const DATA_URLS = {
+  PLATTS_FREIGHT: 'https://www.spglobal.com/commodityinsights/en/our-methodology/price-assessments/oil/tanker-freight-assessments',
+  ARGUS_FREIGHT: 'https://www.argusmedia.com/en/oil-products/argus-freight',
+};
 
 /**
  * Arbitrage drill-down with regional spreads and freight economics
@@ -34,6 +40,29 @@ export const ArbDrillDown = () => {
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
       <TabPanel isActive={activeTab === 'economics'}>
+        {/* Data Source Header */}
+        <div style={styles.dataSourceHeader}>
+          <div style={styles.sourceBadgeRow}>
+            <span style={{
+              ...styles.sourceBadge,
+              background: `${theme.colors.semantic.warning}20`,
+              color: theme.colors.semantic.warning,
+            }}>
+              <AlertCircle size={10} style={{ marginRight: '4px' }} />
+              SAMPLE DATA
+            </span>
+            <span style={styles.sourceNote}>Live arb data requires Platts/Argus subscription</span>
+          </div>
+          <div style={styles.verifyLinks}>
+            <a href={DATA_URLS.PLATTS_FREIGHT} target="_blank" rel="noopener noreferrer" style={styles.verifyLink}>
+              <ExternalLink size={10} /> Platts Freight
+            </a>
+            <a href={DATA_URLS.ARGUS_FREIGHT} target="_blank" rel="noopener noreferrer" style={styles.verifyLink}>
+              <ExternalLink size={10} /> Argus Freight
+            </a>
+          </div>
+        </div>
+
         {/* Current Arb Status */}
         <div style={styles.arbGrid}>
           <div style={styles.arbCard}>
@@ -202,6 +231,53 @@ export const ArbDrillDown = () => {
 
 const styles = {
   container: {},
+  dataSourceHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '12px',
+    marginBottom: '20px',
+    padding: '12px 16px',
+    background: theme.colors.background.card,
+    borderRadius: theme.radius.md,
+  },
+  sourceBadgeRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  sourceBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: '10px',
+    fontWeight: theme.fontWeights.semibold,
+    padding: '4px 10px',
+    borderRadius: theme.radius.full,
+    letterSpacing: '0.5px',
+  },
+  sourceNote: {
+    fontSize: '11px',
+    color: theme.colors.text.muted,
+    fontStyle: 'italic',
+  },
+  verifyLinks: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  verifyLink: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '3px',
+    fontSize: '10px',
+    color: theme.colors.accent.primary,
+    textDecoration: 'none',
+    padding: '3px 8px',
+    borderRadius: theme.radius.sm,
+    background: `${theme.colors.accent.primary}10`,
+  },
   arbGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',

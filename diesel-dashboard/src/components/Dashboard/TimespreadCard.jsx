@@ -1,6 +1,7 @@
 import React from 'react';
 import { theme } from '../../styles/theme';
 import { formatPrice } from '../../utils/formatters';
+import { SourceIndicator } from '../Common/SourceBadge';
 
 /**
  * Timespread display card showing curve structure
@@ -10,6 +11,9 @@ export const TimespreadCard = ({
   value,
   structure, // 'backwardation', 'contango', 'flat'
   onClick,
+  isLive = false,
+  source = 'Sample',
+  dataUrl = null,
 }) => {
   const getStructureColor = () => {
     switch (structure) {
@@ -51,7 +55,10 @@ export const TimespreadCard = ({
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
     >
-      <div style={styles.label}>{title}</div>
+      <div style={styles.header}>
+        <div style={styles.label}>{title}</div>
+        <SourceIndicator isLive={isLive} source={source} dataUrl={dataUrl} />
+      </div>
       
       <div style={styles.valueRow}>
         <span style={styles.sign}>{value >= 0 ? '+' : ''}</span>
@@ -82,12 +89,17 @@ const styles = {
     cursor: 'pointer',
     transition: `all ${theme.transitions.normal}`,
   },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '8px',
+  },
   label: {
     fontSize: theme.fontSizes.xs,
     fontWeight: theme.fontWeights.medium,
     color: theme.colors.text.muted,
     letterSpacing: '1px',
-    marginBottom: '8px',
     fontFamily: theme.fonts.mono,
   },
   valueRow: {

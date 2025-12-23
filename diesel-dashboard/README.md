@@ -154,12 +154,69 @@ daysOfSupply = stocks_bbl / (weekly_demand / 7)
 
 ## Data Sources
 
-| Source | Data | Update Frequency |
-|--------|------|------------------|
-| EIA | US inventories, production, demand | Weekly (Wed 10:30 ET) |
-| FRED | Economic indicators | Varies |
-| Insights Global | ARA stocks | Weekly |
-| ICE/NYMEX | Futures prices | Real-time |
+### Complete Data Source Inventory
+
+| Data Type | Source | Method | Status | Link | Automation Recommendation |
+|-----------|--------|--------|--------|------|---------------------------|
+| **Brent Crude Price** | FRED | API ✅ | LIVE | [DCOILBRENTEU](https://fred.stlouisfed.org/series/DCOILBRENTEU) | ✅ Fully automated |
+| **WTI Crude Price** | FRED | API ✅ | LIVE | [DCOILWTICO](https://fred.stlouisfed.org/series/DCOILWTICO) | ✅ Fully automated |
+| **ULSD Gulf Coast** | FRED | API ✅ | LIVE | [DDFUELUSGULF](https://fred.stlouisfed.org/series/DDFUELUSGULF) | ✅ Fully automated |
+| **ULSD NY Harbor** | FRED | API ✅ | LIVE | [DDFUELNYH](https://fred.stlouisfed.org/series/DDFUELNYH) | ✅ Fully automated |
+| **US Distillate Stocks (Total)** | EIA | API ✅ | LIVE | [EIA Petroleum](https://www.eia.gov/dnav/pet/pet_sum_sndw_dcus_nus_w.htm) | ✅ Fully automated |
+| **PADD Regional Stocks** | EIA | API ✅ | LIVE | [EIA PADD Data](https://www.eia.gov/petroleum/supply/weekly/) | ✅ Fully automated |
+| **ICE Gasoil Price** | Sample | Static | SAMPLE | [ICE Gasoil](https://www.theice.com/products/34361119/Low-Sulphur-Gasoil-Futures) | Use [ICE Connect API](https://www.theice.com/market-data/connectivity-and-feeds) ($) or [Refinitiv Eikon](https://www.refinitiv.com/en/products/eikon-trading-software) ($) |
+| **Price Correlations** | Calculated | API ✅ | LIVE | — | ✅ Calculated from FRED data |
+| **Volatility Metrics** | Calculated | API ✅ | LIVE | — | ✅ Calculated from FRED data |
+| **Forward Curve** | Sample | Static | SAMPLE | [CME ULSD](https://www.cmegroup.com/markets/energy/refined-products/heating-oil.html) | Use [CME DataMine](https://www.cmegroup.com/market-data/datamine-api.html) ($) or [Quandl](https://data.nasdaq.com/publishers/cme) ($) |
+| **Crack Spreads** | Calculated | API ✅ | LIVE | — | ✅ Calculated from FRED prices |
+| **Timespreads** | Sample | Static | SAMPLE | [ICE/CME](https://www.theice.com/products/219/Brent-Crude-Futures) | Use exchange APIs above for M1/M2 contracts |
+| **ARA Stocks (Europe)** | Sample | Static | SAMPLE | [Insights Global](https://www.insights-global.com/) | [Insights Global API](https://www.insights-global.com/api/) ($) or [Argus Media](https://www.argusmedia.com/) ($) |
+| **Refiner Stock Prices** | Sample | Static | SAMPLE | [Yahoo Finance](https://finance.yahoo.com/quote/VLO) | Use [Yahoo Finance API](https://pypi.org/project/yfinance/) (Free) or [Alpha Vantage](https://www.alphavantage.co/) (Free tier) |
+| **News Feed** | Sample | Static | SAMPLE | — | [NewsAPI](https://newsapi.org/) (Free tier) with energy keywords, or [Refinitiv News](https://www.refinitiv.com/) ($) |
+| **Seasonality Data** | Sample | Static | SAMPLE | — | Calculate from 5-year EIA historical (already available via API) |
+| **Demand Indicators** | Sample | Static | SAMPLE | — | [FRED Trucking](https://fred.stlouisfed.org/series/TRUCKD11) (Free), [EIA Product Supplied](https://www.eia.gov/dnav/pet/pet_cons_psup_dc_nus_mbblpd_w.htm) (Free API) |
+
+### Status Legend
+- **LIVE**: Real-time data from API, updates automatically
+- **SAMPLE**: Static illustrative data, needs API integration for production
+
+### Data Update Frequencies
+
+| Source | Update Frequency | Best Time to Refresh |
+|--------|------------------|---------------------|
+| FRED Prices | Daily (1-day delay) | After 6 PM ET |
+| EIA Weekly Stocks | Weekly | Wednesday 10:30 AM ET |
+| ICE/CME Futures | Real-time (with subscription) | Market hours |
+| Insights Global ARA | Weekly | Thursday |
+
+### Recommended Path to Full Automation
+
+**Phase 1 - Free APIs (Current)**
+- ✅ FRED for crude & diesel spot prices
+- ✅ EIA for US inventory data
+- ✅ Calculated metrics (cracks, correlations, volatility)
+
+**Phase 2 - Low-Cost Additions**
+- Yahoo Finance API for refiner equities (free)
+- NewsAPI for market news (free tier: 100 req/day)
+- Calculate seasonality from EIA 5-year history
+
+**Phase 3 - Premium Data (Production)**
+- ICE Connect or CME DataMine for real-time futures (~$500-2000/mo)
+- Refinitiv/Bloomberg for comprehensive market data (~$1500-2000/mo)
+- Insights Global for European inventory data (~$500/mo)
+
+### API Configuration
+
+Current `.env` requirements:
+```env
+REACT_APP_EIA_API_KEY=your_eia_key_here
+REACT_APP_FRED_API_KEY=your_fred_key_here
+```
+
+**Getting Free API Keys:**
+- **EIA**: [eia.gov/opendata/register](https://www.eia.gov/opendata/register.php) (instant)
+- **FRED**: [fred.stlouisfed.org/docs/api/api_key](https://fred.stlouisfed.org/docs/api/api_key.html) (instant)
 
 ## Contributing
 

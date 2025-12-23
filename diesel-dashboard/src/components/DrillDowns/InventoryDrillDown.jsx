@@ -1,20 +1,40 @@
-import React, { useState } from 'react';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Area } from 'recharts';
+import React, { useState, useMemo } from 'react';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { theme } from '../../styles/theme';
 import { Tabs, TabPanel } from '../Common/Tabs';
 import { useEIAData } from '../../hooks/useEIAData';
 import { sampleEIAData, sampleInventories } from '../../data/sampleData';
-import { THRESHOLDS } from '../../utils/constants';
-import { Database, MapPin, Clock, AlertTriangle } from 'lucide-react';
+import { THRESHOLDS, EIA_AREAS } from '../../utils/constants';
+import { Database, MapPin, Clock, AlertTriangle, CheckCircle, ExternalLink } from 'lucide-react';
+
+// EIA Data URLs for QA/QC verification
+const EIA_URLS = {
+  WEEKLY_STOCKS: 'https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_nus_w.htm',
+  PADD1: 'https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_r10_w.htm',
+  PADD2: 'https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_r20_w.htm',
+  PADD3: 'https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_r30_w.htm',
+  PADD4: 'https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_r40_w.htm',
+  PADD5: 'https://www.eia.gov/dnav/pet/pet_stoc_wstk_dcu_r50_w.htm',
+  API_DOCS: 'https://www.eia.gov/opendata/browser/petroleum/sum/sndw',
+};
+
+// Time range options for PADD charts
+const TIME_RANGES = [
+  { id: '3m', label: '3 Months', weeks: 13 },
+  { id: '6m', label: '6 Months', weeks: 26 },
+  { id: '1y', label: '1 Year', weeks: 52 },
+];
 
 /**
  * Inventory drill-down with EIA data integration
  */
 export const InventoryDrillDown = () => {
   const [activeTab, setActiveTab] = useState('stocks');
-  const { distillateStocks, loading, hasApiKey, refresh } = useEIAData();
+  const [paddTimeRange, setPaddTimeRange] = useState('3m');
+  const { distillateStocks, paddBreakdown, loading, hasApiKey, refresh, error } = useEIAData();
 
-  const data = distillateStocks || sampleEIAData;
+  // Use live data if available, otherwise sample data
+  const data = distillateStocks && distillateStocks.length > 0 ? distillateStocks : sampleEIAData;
 
   const tabs = [
     { id: 'stocks', label: 'US Stocks', icon: <Database size={14} /> },
@@ -22,18 +42,93 @@ export const InventoryDrillDown = () => {
     { id: 'supply', label: 'Days of Supply', icon: <Clock size={14} /> },
   ];
 
-  // Calculate stock position vs 5-year range
+  // Get current stocks - EIA data is in thousand barrels
   const currentStocks = data[0]?.distillate || sampleInventories.usDistillate.current;
-  const fiveYearAvg = sampleInventories.usDistillate.fiveYearAvg;
-  const fiveYearLow = sampleInventories.usDistillate.fiveYearLow;
-  const fiveYearHigh = sampleInventories.usDistillate.fiveYearHigh;
+  const previousStocks = data[1]?.distillate || currentStocks;
+  const weeklyChange = currentStocks - previousStocks;
+  
+  // 5-year range reference values (in thousand barrels)
+  const fiveYearAvg = 125000;
+  const fiveYearLow = 104000;
+  const fiveYearHigh = 148000;
+  
   const vsAverage = ((currentStocks - fiveYearAvg) / fiveYearAvg * 100).toFixed(1);
-  const position = ((currentStocks - fiveYearLow) / (fiveYearHigh - fiveYearLow) * 100).toFixed(0);
+  const position = Math.max(0, Math.min(100, ((currentStocks - fiveYearLow) / (fiveYearHigh - fiveYearLow) * 100))).toFixed(0);
+
+  // Get PADD data from API or use sample
+  const getPaddValue = (paddCode) => {
+    if (paddBreakdown) {
+      const padd = paddBreakdown.find(p => p.padd === paddCode);
+      return padd?.value ? parseInt(padd.value) : null;
+    }
+    return null;
+  };
+
+  // Get EIA URL for a PADD code
+  const getPaddUrl = (paddCode) => {
+    const urlMap = {
+      [EIA_AREAS.PADD1]: EIA_URLS.PADD1,
+      [EIA_AREAS.PADD2]: EIA_URLS.PADD2,
+      [EIA_AREAS.PADD3]: EIA_URLS.PADD3,
+      [EIA_AREAS.PADD4]: EIA_URLS.PADD4,
+      [EIA_AREAS.PADD5]: EIA_URLS.PADD5,
+    };
+    return urlMap[paddCode] || EIA_URLS.WEEKLY_STOCKS;
+  };
+
+  // Get the number of weeks to display based on selected range
+  const selectedWeeks = TIME_RANGES.find(r => r.id === paddTimeRange)?.weeks || 13;
+
+  // Prepare PADD chart data with the selected time range
+  const paddChartData = useMemo(() => {
+    if (!paddBreakdown) {
+      return [];
+    }
+    
+    return paddBreakdown.map(padd => {
+      const history = padd.history || [];
+      const slicedHistory = history.slice(0, selectedWeeks).reverse();
+      
+      return {
+        ...padd,
+        chartData: slicedHistory.map(item => ({
+          week: item.week.slice(5), // MM-DD format
+          value: item.value / 1000, // Convert to MMbbl
+          fullDate: item.week,
+        })),
+      };
+    });
+  }, [paddBreakdown, selectedWeeks]);
+
+  const padd1Value = getPaddValue(EIA_AREAS.PADD1) || sampleInventories.padd1.current;
+  const padd3Value = getPaddValue(EIA_AREAS.PADD3) || sampleInventories.padd3.current;
+
+  // Format chart data - show changes in thousand barrels
+  const chartData = data.slice(0, 12).map(item => ({
+    ...item,
+    week: item.week ? item.week.slice(5) : '', // Show MM-DD format
+    change: item.change / 1000, // Convert to millions for display
+  })).reverse();
 
   return (
     <div style={styles.container}>
-      {/* API Key Warning */}
-      {!hasApiKey && (
+      {/* API Status Indicator */}
+      {hasApiKey ? (
+        <div style={styles.apiSuccess}>
+          <CheckCircle size={16} />
+          <span>Live EIA Data • Last report: {data[0]?.week || 'N/A'}</span>
+          <a 
+            href={EIA_URLS.WEEKLY_STOCKS} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={styles.verifyLink}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink size={12} />
+            Verify Data
+          </a>
+        </div>
+      ) : (
         <div style={styles.apiWarning}>
           <AlertTriangle size={16} />
           <span>Using sample data. Add EIA API key for live data.</span>
@@ -49,6 +144,15 @@ export const InventoryDrillDown = () => {
             <div>
               <div style={styles.positionLabel}>US Distillate Stocks</div>
               <div style={styles.positionValue}>{(currentStocks / 1000).toFixed(1)} MMbbl</div>
+              <div style={styles.weeklyChange}>
+                Weekly Change: 
+                <span style={{ 
+                  color: weeklyChange >= 0 ? theme.colors.semantic.bullish : theme.colors.semantic.bearish,
+                  marginLeft: '8px'
+                }}>
+                  {weeklyChange >= 0 ? '+' : ''}{(weeklyChange / 1000).toFixed(2)} MMbbl
+                </span>
+              </div>
             </div>
             <div style={styles.positionMeta}>
               <div style={{
@@ -80,18 +184,23 @@ export const InventoryDrillDown = () => {
 
         {/* Weekly Changes Chart */}
         <div style={styles.chartContainer}>
-          <h3 style={styles.chartTitle}>Weekly Stock Changes (000 bbl)</h3>
+          <h3 style={styles.chartTitle}>Weekly Stock Changes (MMbbl)</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.slice(0, 10).reverse()} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border.default} />
               <XAxis dataKey="week" stroke={theme.colors.text.muted} tick={{ fill: theme.colors.text.muted, fontSize: 10 }} />
-              <YAxis stroke={theme.colors.text.muted} tick={{ fill: theme.colors.text.muted, fontSize: 11 }} />
+              <YAxis 
+                stroke={theme.colors.text.muted} 
+                tick={{ fill: theme.colors.text.muted, fontSize: 11 }}
+                tickFormatter={(value) => value.toFixed(1)}
+              />
               <Tooltip 
                 contentStyle={{
                   background: theme.colors.background.primary,
                   border: `1px solid ${theme.colors.border.default}`,
                   borderRadius: theme.radius.md,
                 }}
+                formatter={(value) => [`${value.toFixed(2)} MMbbl`, 'Change']}
               />
               <Bar 
                 dataKey="change" 
@@ -99,6 +208,41 @@ export const InventoryDrillDown = () => {
                 radius={[4, 4, 0, 0]}
               />
             </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Stock Level Chart */}
+        <div style={styles.chartContainer}>
+          <h3 style={styles.chartTitle}>Stock Level Trend (MMbbl)</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={data.slice(0, 12).map(d => ({
+              ...d,
+              week: d.week ? d.week.slice(5) : '',
+              level: d.distillate / 1000
+            })).reverse()} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border.default} />
+              <XAxis dataKey="week" stroke={theme.colors.text.muted} tick={{ fill: theme.colors.text.muted, fontSize: 10 }} />
+              <YAxis 
+                stroke={theme.colors.text.muted} 
+                tick={{ fill: theme.colors.text.muted, fontSize: 11 }}
+                domain={['dataMin - 5', 'dataMax + 5']}
+              />
+              <Tooltip 
+                contentStyle={{
+                  background: theme.colors.background.primary,
+                  border: `1px solid ${theme.colors.border.default}`,
+                  borderRadius: theme.radius.md,
+                }}
+                formatter={(value) => [`${value.toFixed(1)} MMbbl`, 'Stocks']}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="level" 
+                stroke={theme.colors.accent.secondary}
+                strokeWidth={2}
+                dot={{ fill: theme.colors.accent.secondary, r: 3 }}
+              />
+            </LineChart>
           </ResponsiveContainer>
         </div>
 
@@ -124,38 +268,139 @@ export const InventoryDrillDown = () => {
       </TabPanel>
 
       <TabPanel isActive={activeTab === 'padd'}>
-        <div style={styles.paddGrid}>
-          <div style={styles.paddCard}>
-            <div style={styles.paddHeader}>
-              <span style={styles.paddName}>PADD 1 - East Coast</span>
-              <span style={{ 
-                ...styles.paddStatus,
-                color: sampleInventories.padd1.current < THRESHOLDS.PADD1_STOCKS.TIGHT * 1000 
-                  ? theme.colors.semantic.bearish 
-                  : theme.colors.semantic.neutral
-              }}>
-                {sampleInventories.padd1.current < THRESHOLDS.PADD1_STOCKS.TIGHT * 1000 ? 'TIGHT' : 'NORMAL'}
-              </span>
-            </div>
-            <div style={styles.paddValue}>{(sampleInventories.padd1.current / 1000).toFixed(1)} MMbbl</div>
-            <div style={styles.paddChange}>
-              WoW: {sampleInventories.padd1.change > 0 ? '+' : ''}{(sampleInventories.padd1.change / 1000).toFixed(1)}MM
-            </div>
-            <div style={styles.paddNote}>Critical region for heating oil. Watch in winter.</div>
+        {/* Time Range Selector */}
+        <div style={styles.timeRangeSelector}>
+          <span style={styles.timeRangeLabel}>Time Range:</span>
+          <div style={styles.timeRangeButtons}>
+            {TIME_RANGES.map(range => (
+              <button
+                key={range.id}
+                style={{
+                  ...styles.timeRangeButton,
+                  ...(paddTimeRange === range.id ? styles.timeRangeButtonActive : {}),
+                }}
+                onClick={() => setPaddTimeRange(range.id)}
+              >
+                {range.label}
+              </button>
+            ))}
           </div>
-
-          <div style={styles.paddCard}>
-            <div style={styles.paddHeader}>
-              <span style={styles.paddName}>PADD 3 - Gulf Coast</span>
-              <span style={{ ...styles.paddStatus, color: theme.colors.semantic.neutral }}>NORMAL</span>
-            </div>
-            <div style={styles.paddValue}>{(sampleInventories.padd3.current / 1000).toFixed(1)} MMbbl</div>
-            <div style={styles.paddChange}>
-              WoW: {sampleInventories.padd3.change > 0 ? '+' : ''}{(sampleInventories.padd3.change / 1000).toFixed(1)}MM
-            </div>
-            <div style={styles.paddNote}>Refining hub. Export-driven draws.</div>
+          <div style={styles.paddDataStatus}>
+            <span style={{
+              ...styles.paddSourceBadge,
+              background: hasApiKey && paddBreakdown ? `${theme.colors.semantic.bullish}20` : `${theme.colors.semantic.warning}20`,
+              color: hasApiKey && paddBreakdown ? theme.colors.semantic.bullish : theme.colors.semantic.warning,
+            }}>
+              {hasApiKey && paddBreakdown ? '● LIVE EIA DATA' : '○ SAMPLE DATA'}
+            </span>
           </div>
+        </div>
 
+        {/* PADD Charts Grid */}
+        {paddChartData.length > 0 ? (
+          <div style={styles.paddChartsGrid}>
+            {paddChartData.map((padd) => {
+              const currentValue = padd.value && padd.value > 0 ? (padd.value / 1000).toFixed(1) : 'N/A';
+              const chartValues = padd.chartData.map(d => d.value);
+              const hasChartData = chartValues.length > 0;
+              const minValue = hasChartData ? Math.min(...chartValues) * 0.95 : 0;
+              const maxValue = hasChartData ? Math.max(...chartValues) * 1.05 : 100;
+              
+              return (
+                <div key={padd.padd} style={styles.paddChartCard}>
+                  <div style={styles.paddChartHeader}>
+                    <div>
+                      <div style={styles.paddChartName}>{padd.name}</div>
+                      <div style={styles.paddChartValue}>{currentValue} MMbbl</div>
+                    </div>
+                    <a 
+                      href={getPaddUrl(padd.padd)} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      style={styles.paddVerifyLink}
+                    >
+                      <ExternalLink size={10} /> Verify
+                    </a>
+                  </div>
+                  {hasChartData ? (
+                  <ResponsiveContainer width="100%" height={150}>
+                    <AreaChart data={padd.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id={`gradient-${padd.padd}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={theme.colors.accent.primary} stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor={theme.colors.accent.primary} stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border.default} />
+                      <XAxis 
+                        dataKey="week" 
+                        stroke={theme.colors.text.muted} 
+                        tick={{ fill: theme.colors.text.muted, fontSize: 9 }}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis 
+                        stroke={theme.colors.text.muted}
+                        tick={{ fill: theme.colors.text.muted, fontSize: 9 }}
+                        domain={[minValue, maxValue]}
+                        tickFormatter={(v) => v.toFixed(0)}
+                      />
+                      <Tooltip 
+                        contentStyle={{
+                          background: theme.colors.background.primary,
+                          border: `1px solid ${theme.colors.border.default}`,
+                          borderRadius: theme.radius.md,
+                          fontSize: '12px',
+                        }}
+                        formatter={(value) => [`${value.toFixed(2)} MMbbl`, 'Stocks']}
+                        labelFormatter={(label, payload) => payload?.[0]?.payload?.fullDate || label}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="value" 
+                        stroke={theme.colors.accent.primary}
+                        strokeWidth={2}
+                        fill={`url(#gradient-${padd.padd})`}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                  ) : (
+                    <div style={styles.noChartData}>Loading chart data...</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Fallback: Original card view when no historical data */
+          <div style={styles.paddGrid}>
+            <div style={styles.paddCard}>
+              <div style={styles.paddHeader}>
+                <span style={styles.paddName}>PADD 1 - East Coast</span>
+                <span style={{ 
+                  ...styles.paddStatus,
+                  color: padd1Value < 25000 
+                    ? theme.colors.semantic.bearish 
+                    : theme.colors.semantic.neutral
+                }}>
+                  {padd1Value < 25000 ? 'TIGHT' : 'NORMAL'}
+                </span>
+              </div>
+              <div style={styles.paddValue}>{(padd1Value / 1000).toFixed(1)} MMbbl</div>
+              <div style={styles.paddNote}>Critical region for heating oil. Watch in winter.</div>
+            </div>
+            <div style={styles.paddCard}>
+              <div style={styles.paddHeader}>
+                <span style={styles.paddName}>PADD 3 - Gulf Coast</span>
+                <span style={{ ...styles.paddStatus, color: theme.colors.semantic.neutral }}>NORMAL</span>
+              </div>
+              <div style={styles.paddValue}>{(padd3Value / 1000).toFixed(1)} MMbbl</div>
+              <div style={styles.paddNote}>Refining hub. Export-driven draws.</div>
+            </div>
+          </div>
+        )}
+
+        {/* ARA Europe Card - Always sample data */}
+        <div style={styles.paddAraSection}>
           <div style={styles.paddCard}>
             <div style={styles.paddHeader}>
               <span style={styles.paddName}>ARA - Europe</span>
@@ -169,10 +414,16 @@ export const InventoryDrillDown = () => {
               </span>
             </div>
             <div style={styles.paddValue}>{sampleInventories.araStocks.current.toFixed(2)} MMmt</div>
-            <div style={styles.paddChange}>
-              WoW: {sampleInventories.araStocks.change > 0 ? '+' : ''}{sampleInventories.araStocks.change.toFixed(2)}MM
+            <div style={styles.paddSourceRow}>
+              <span style={{
+                ...styles.paddSourceBadge,
+                background: `${theme.colors.semantic.warning}20`,
+                color: theme.colors.semantic.warning,
+              }}>
+                ○ SAMPLE
+              </span>
             </div>
-            <div style={styles.paddNote}>Amsterdam-Rotterdam-Antwerp hub.</div>
+            <div style={styles.paddNote}>ARA requires IES/PJK subscription. Amsterdam-Rotterdam-Antwerp hub.</div>
           </div>
         </div>
 
@@ -258,6 +509,36 @@ const styles = {
     marginBottom: '16px',
     color: theme.colors.semantic.warning,
     fontSize: theme.fontSizes.sm,
+  },
+  apiSuccess: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px 16px',
+    background: `${theme.colors.semantic.bullish}15`,
+    borderRadius: theme.radius.md,
+    marginBottom: '16px',
+    color: theme.colors.semantic.bullish,
+    fontSize: theme.fontSizes.sm,
+  },
+  verifyLink: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    marginLeft: 'auto',
+    padding: '4px 8px',
+    background: `${theme.colors.accent.primary}20`,
+    borderRadius: theme.radius.sm,
+    color: theme.colors.accent.primary,
+    fontSize: '10px',
+    fontWeight: theme.fontWeights.medium,
+    textDecoration: 'none',
+    cursor: 'pointer',
+  },
+  weeklyChange: {
+    fontSize: theme.fontSizes.sm,
+    color: theme.colors.text.muted,
+    marginTop: '8px',
   },
   positionCard: {
     background: theme.colors.background.card,
@@ -403,6 +684,114 @@ const styles = {
   paddNote: {
     fontSize: theme.fontSizes.xs,
     color: theme.colors.text.disabled,
+  },
+  paddSourceRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '8px',
+  },
+  paddSourceBadge: {
+    fontSize: '10px',
+    fontWeight: theme.fontWeights.semibold,
+    padding: '2px 8px',
+    borderRadius: theme.radius.full,
+    letterSpacing: '0.5px',
+  },
+  paddVerifyLink: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '3px',
+    fontSize: '10px',
+    color: theme.colors.accent.primary,
+    textDecoration: 'none',
+    padding: '2px 6px',
+    borderRadius: theme.radius.sm,
+    background: `${theme.colors.accent.primary}10`,
+    transition: 'background 0.2s',
+  },
+  // Time Range Selector styles
+  timeRangeSelector: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '12px',
+    marginBottom: '20px',
+    padding: '12px 16px',
+    background: theme.colors.background.card,
+    borderRadius: theme.radius.md,
+  },
+  timeRangeLabel: {
+    fontSize: theme.fontSizes.sm,
+    color: theme.colors.text.muted,
+    fontWeight: theme.fontWeights.medium,
+  },
+  timeRangeButtons: {
+    display: 'flex',
+    gap: '4px',
+  },
+  timeRangeButton: {
+    padding: '6px 12px',
+    fontSize: theme.fontSizes.xs,
+    fontWeight: theme.fontWeights.medium,
+    color: theme.colors.text.secondary,
+    background: 'transparent',
+    border: `1px solid ${theme.colors.border.default}`,
+    borderRadius: theme.radius.sm,
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  timeRangeButtonActive: {
+    background: theme.colors.accent.primary,
+    color: theme.colors.text.inverse || '#000',
+    borderColor: theme.colors.accent.primary,
+  },
+  paddDataStatus: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  // PADD Charts Grid styles
+  paddChartsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+    gap: '16px',
+    marginBottom: '24px',
+  },
+  paddChartCard: {
+    background: theme.colors.background.card,
+    borderRadius: theme.radius.md,
+    padding: '16px',
+  },
+  noChartData: {
+    height: '150px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: theme.colors.text.muted,
+    fontSize: theme.fontSizes.sm,
+  },
+  paddChartHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '12px',
+  },
+  paddChartName: {
+    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.semibold,
+    color: theme.colors.text.primary,
+    marginBottom: '4px',
+  },
+  paddChartValue: {
+    fontSize: theme.fontSizes.xl,
+    fontWeight: theme.fontWeights.bold,
+    color: theme.colors.accent.primary,
+    fontFamily: theme.fonts.mono,
+  },
+  paddAraSection: {
+    maxWidth: '400px',
+    marginBottom: '24px',
   },
   supplyGrid: {
     display: 'grid',

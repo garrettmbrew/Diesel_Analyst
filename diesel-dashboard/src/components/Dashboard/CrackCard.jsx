@@ -3,6 +3,7 @@ import { theme } from '../../styles/theme';
 import { formatPrice } from '../../utils/formatters';
 import { getCrackSignal } from '../../utils/calculations';
 import { THRESHOLDS } from '../../utils/constants';
+import { SourceIndicator } from '../Common/SourceBadge';
 
 /**
  * Crack spread display card with signal indicator
@@ -12,6 +13,10 @@ export const CrackCard = ({
   value,
   change,
   onClick,
+  isLive = false,
+  source = 'Calculated',
+  dataUrl = null,
+  dataDate = null,
 }) => {
   const signal = getCrackSignal(value);
   const isPositive = change >= 0;
@@ -35,7 +40,10 @@ export const CrackCard = ({
       tabIndex={onClick ? 0 : undefined}
     >
       <div style={styles.header}>
-        <div style={styles.label}>{title}</div>
+        <div style={styles.labelRow}>
+          <div style={styles.label}>{title}</div>
+          <SourceIndicator isLive={isLive} source={source} dataUrl={dataUrl} />
+        </div>
         {signal && (
           <div style={{
             ...styles.signal,
@@ -65,11 +73,16 @@ export const CrackCard = ({
         </div>
       </div>
       
-      <div style={{
-        ...styles.change,
-        color: isPositive ? theme.colors.semantic.bullish : theme.colors.semantic.bearish,
-      }}>
-        {isPositive ? '+' : ''}{formatPrice(change, 2)} vs yesterday
+      <div style={styles.footer}>
+        <div style={{
+          ...styles.change,
+          color: isPositive ? theme.colors.semantic.bullish : theme.colors.semantic.bearish,
+        }}>
+          {isPositive ? '+' : ''}{formatPrice(change, 2)} vs yesterday
+        </div>
+        {isLive && dataDate && (
+          <div style={styles.dataDate}>as of {dataDate}</div>
+        )}
       </div>
     </div>
   );
@@ -87,8 +100,13 @@ const styles = {
   header: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: '8px',
+  },
+  labelRow: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
   },
   label: {
     fontSize: theme.fontSizes.xs,
@@ -134,8 +152,18 @@ const styles = {
     borderRadius: theme.radius.full,
     transition: `width ${theme.transitions.slow}`,
   },
+  footer: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   change: {
     fontSize: theme.fontSizes.xs,
+    fontFamily: theme.fonts.mono,
+  },
+  dataDate: {
+    fontSize: '10px',
+    color: theme.colors.text.muted,
     fontFamily: theme.fonts.mono,
   },
 };

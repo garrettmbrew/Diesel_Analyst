@@ -1,0 +1,27 @@
+# Python dependencies for Diesel Data Backend
+
+# Web framework
+fastapi==0.104.1
+uvicorn==0.24.0
+
+# Database
+sqlalchemy==2.0.23
+
+# HTTP requests to external APIs
+httpx==0.25.2
+requests==2.31.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Data manipulation
+pandas==2.1.3
+
+# Date/time handling
+python-dateutil==2.8.2
+
+# Scheduling (for automated fetches)
+apscheduler==3.10.4
+
+# CORS (for React to talk to this API)
+# Already included in FastAPI, but listing for clarity

@@ -3,7 +3,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { theme } from '../../styles/theme';
 import { Tabs, TabPanel } from '../Common/Tabs';
 import { sampleForwardCurve } from '../../data/sampleData';
-import { TrendingUp, Layers, Calculator } from 'lucide-react';
+import { TrendingUp, Layers, Calculator, ExternalLink } from 'lucide-react';
+
+// Data source URLs for verification
+const DATA_URLS = {
+  ICE_GASOIL: 'https://www.theice.com/products/34361119/Low-Sulphur-Gasoil-Futures',
+  CME_ULSD: 'https://www.cmegroup.com/markets/energy/refined-products/heating-oil.html',
+};
 
 /**
  * Timespread drill-down with forward curve and storage economics
@@ -23,7 +29,21 @@ export const TimespreadDrillDown = () => {
 
       <TabPanel isActive={activeTab === 'curve'}>
         <div style={styles.chartContainer}>
-          <h3 style={styles.chartTitle}>ICE Gasoil Forward Curve ($/mt)</h3>
+          <div style={styles.chartHeader}>
+            <h3 style={styles.chartTitle}>ICE Gasoil Forward Curve ($/mt)</h3>
+            <div style={styles.sourceBadgeRow}>
+              <span style={{
+                ...styles.sourceBadge,
+                background: `${theme.colors.semantic.warning}20`,
+                color: theme.colors.semantic.warning,
+              }}>
+                ○ SAMPLE DATA
+              </span>
+              <a href={DATA_URLS.ICE_GASOIL} target="_blank" rel="noopener noreferrer" style={styles.verifyLink}>
+                <ExternalLink size={10} /> ICE Gasoil
+              </a>
+            </div>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={sampleForwardCurve} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border.default} />
@@ -209,11 +229,43 @@ const styles = {
     padding: '20px',
     marginBottom: '24px',
   },
+  chartHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '16px',
+    flexWrap: 'wrap',
+    gap: '12px',
+  },
   chartTitle: {
-    margin: '0 0 16px 0',
+    margin: 0,
     fontSize: theme.fontSizes.md,
     fontWeight: theme.fontWeights.semibold,
     color: theme.colors.text.primary,
+  },
+  sourceBadgeRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  sourceBadge: {
+    fontSize: '10px',
+    fontWeight: theme.fontWeights.semibold,
+    padding: '3px 10px',
+    borderRadius: theme.radius.full,
+    letterSpacing: '0.5px',
+  },
+  verifyLink: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '3px',
+    fontSize: '10px',
+    color: theme.colors.accent.primary,
+    textDecoration: 'none',
+    padding: '3px 8px',
+    borderRadius: theme.radius.sm,
+    background: `${theme.colors.accent.primary}10`,
   },
   spreadGrid: {
     display: 'grid',
