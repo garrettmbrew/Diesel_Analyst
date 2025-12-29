@@ -9,11 +9,16 @@ import {
 } from '../data/sampleData';
 import { calcGasoilCrack, calcUlsdCrack, calc321Crack } from '../utils/calculations';
 import { useFREDData } from './useFREDData';
+import { useBackendData } from './useBackendData';
 
 /**
  * Main hook for fetching and managing market data
- * Uses FRED API for live price data when API key is available
- * Falls back to sample data with simulated updates
+ * Priority order: Backend API > FRED API > Sample Data
+ * 
+ * Data Sources:
+ * 1. Backend API (http://localhost:8000) - Cached data from database
+ * 2. FRED API - Direct API calls (requires API key)
+ * 3. Sample Data - Fallback when no APIs available
  */
 export const useMarketData = (refreshInterval = 60000) => {
   const [prices, setPrices] = useState(null);
@@ -27,6 +32,14 @@ export const useMarketData = (refreshInterval = 60000) => {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [dataSource, setDataSource] = useState('sample');
 
+  // Get backend data
+  const {
+    isBackendAvailable,
+    fetchLatestPrices: fetchBackendPrices,
+    fetchLatestInventories: fetchBackendInventories,
+    loading: backendLoading,
+  } = useBackendData();
+
   // Get FRED data
   const { 
     brentPrice, 
@@ -38,9 +51,58 @@ export const useMarketData = (refreshInterval = 60000) => {
     loading: fredLoading,
   } = useFREDData();
 
-  // Build prices from FRED data or fall back to sample
-  const buildPrices = useCallback(() => {
-    // Check if we have FRED data
+  // Build prices from backend or FRED data or fall back to sample
+  const buildPrices = useCallback(async () => {
+    // First, try backend API
+    if (isBackendAvailable) {
+      try {
+        const backendPrices = await fetchBackendPrices();
+        if (backendPrices) {
+          setDataSource('Backend API (Database)');
+          
+          // Transform backend format to dashboard format
+          return {
+            brent: {
+              price: backendPrices.DCOILBRENTEU?.value || samplePrices.brent.price,
+              change: backendPrices.DCOILBRENTEU?.change || 0,
+              changePercent: backendPrices.DCOILBRENTEU?.changePercent || 0,
+              high: backendPrices.DCOILBRENTEU?.high || samplePrices.brent.high,
+              low: backendPrices.DCOILBRENTEU?.low || samplePrices.brent.low,
+              date: backendPrices.DCOILBRENTEU?.date,
+            },
+            wti: {
+              price: backendPrices.DCOILWTICO?.value || samplePrices.wti.price,
+              change: backendPrices.DCOILWTICO?.change || 0,
+              changePercent: backendPrices.DCOILWTICO?.changePercent || 0,
+              high: backendPrices.DCOILWTICO?.high || samplePrices.wti.high,
+              low: backendPrices.DCOILWTICO?.low || samplePrices.wti.low,
+              date: backendPrices.DCOILWTICO?.date,
+            },
+            iceGasoil: {
+              // Estimate from Brent + crack
+              price: ((backendPrices.DCOILBRENTEU?.value || samplePrices.brent.price) + 18) * 7.45,
+              change: (backendPrices.DCOILBRENTEU?.change || 0) * 7.45,
+              changePercent: backendPrices.DCOILBRENTEU?.changePercent || 0,
+              high: samplePrices.iceGasoil.high,
+              low: samplePrices.iceGasoil.low,
+            },
+            nymexUlsd: {
+              price: backendPrices.DDFUELUSGULF?.value || backendPrices.DDFUELNYH?.value || samplePrices.nymexUlsd.price,
+              change: backendPrices.DDFUELUSGULF?.change || 0,
+              changePercent: backendPrices.DDFUELUSGULF?.changePercent || 0,
+              high: backendPrices.DDFUELUSGULF?.high || samplePrices.nymexUlsd.high,
+              low: backendPrices.DDFUELUSGULF?.low || samplePrices.nymexUlsd.low,
+              date: backendPrices.DDFUELUSGULF?.date,
+            },
+            rbob: samplePrices.rbob, // Not in backend yet
+          };
+        }
+      } catch (err) {
+        console.error('Backend fetch failed, trying FRED:', err);
+      }
+    }
+    
+    // Second, try FRED API if we have keys
     if (hasFredKey && brentPrice && wtiPrice) {
       setDataSource('FRED API');
       
@@ -98,12 +160,50 @@ export const useMarketData = (refreshInterval = 60000) => {
     // Fallback to sample data
     setDataSource('Sample Data');
     return samplePrices;
-  }, [hasFredKey, brentPrice, wtiPrice, dieselGulf, dieselNYH]);
+  }, [isBackendAvailable, fetchBackendPrices, hasFredKey, brentPrice, wtiPrice, dieselGulf, dieselNYH]);
+
+  // Fetch inventory data from backend
+  const buildInventories = useCallback(async () => {
+    if (isBackendAvailable) {
+      try {
+        const backendInventories = await fetchBackendInventories();
+        if (backendInventories) {
+          // Transform backend format to dashboard format
+          return {
+            usDistillate: {
+              current: backendInventories.US?.value || sampleInventories.usDistillate.current,
+              previous: backendInventories.US?.previous || sampleInventories.usDistillate.previous,
+              change: backendInventories.US?.change || 0,
+              fiveYearAvg: sampleInventories.usDistillate.fiveYearAvg,
+              fiveYearLow: sampleInventories.usDistillate.fiveYearLow,
+              fiveYearHigh: sampleInventories.usDistillate.fiveYearHigh,
+            },
+            padd1: {
+              current: backendInventories.PADD1?.value || sampleInventories.padd1.current,
+              previous: backendInventories.PADD1?.previous || sampleInventories.padd1.previous,
+              change: backendInventories.PADD1?.change || 0,
+            },
+            padd3: {
+              current: backendInventories.PADD3?.value || sampleInventories.padd3.current,
+              previous: backendInventories.PADD3?.previous || sampleInventories.padd3.previous,
+              change: backendInventories.PADD3?.change || 0,
+            },
+            araStocks: sampleInventories.araStocks, // Not in backend yet
+          };
+        }
+      } catch (err) {
+        console.error('Backend inventory fetch failed:', err);
+      }
+    }
+    
+    return sampleInventories;
+  }, [isBackendAvailable, fetchBackendInventories]);
 
   // Fetch/update market data
   const fetchData = useCallback(async () => {
     try {
-      const updatedPrices = buildPrices();
+      const updatedPrices = await buildPrices();
+      const updatedInventories = await buildInventories();
 
       // Calculate cracks based on current prices
       const gasoilCrack = calcGasoilCrack(updatedPrices.iceGasoil.price, updatedPrices.brent.price);
@@ -132,7 +232,7 @@ export const useMarketData = (refreshInterval = 60000) => {
       setPrices(updatedPrices);
       setCracks(updatedCracks);
       setTimespreads(sampleTimespreads);
-      setInventories(sampleInventories);
+      setInventories(updatedInventories);
       setArbs(sampleArbs);
       setNews(sampleNews);
       setLastUpdate(new Date());
@@ -141,29 +241,34 @@ export const useMarketData = (refreshInterval = 60000) => {
       setError(err.message);
       setLoading(false);
     }
-  }, [buildPrices]);
+  }, [buildPrices, buildInventories]);
 
-  // Initial fetch and when FRED data updates
+  // Initial fetch and when data sources update
   useEffect(() => {
     fetchData();
-  }, [fetchData, brentPrice, wtiPrice]);
+  }, [fetchData, brentPrice, wtiPrice, isBackendAvailable]);
 
   // Set up refresh interval
   useEffect(() => {
     if (refreshInterval > 0) {
       const interval = setInterval(() => {
-        refreshFred();
+        if (!isBackendAvailable) {
+          refreshFred();
+        }
+        fetchData();
       }, refreshInterval);
       return () => clearInterval(interval);
     }
-  }, [refreshInterval, refreshFred]);
+  }, [refreshInterval, refreshFred, fetchData, isBackendAvailable]);
 
   // Manual refresh function
   const refresh = useCallback(async () => {
     setLoading(true);
-    await refreshFred();
-    fetchData();
-  }, [fetchData, refreshFred]);
+    if (!isBackendAvailable) {
+      await refreshFred();
+    }
+    await fetchData();
+  }, [fetchData, refreshFred, isBackendAvailable]);
 
   return {
     prices,
@@ -172,12 +277,13 @@ export const useMarketData = (refreshInterval = 60000) => {
     inventories,
     arbs,
     news,
-    loading: loading || fredLoading,
+    loading: loading || fredLoading || backendLoading,
     error,
     lastUpdate,
     refresh,
     dataSource,
     hasFredKey,
+    isBackendAvailable,
   };
 };
 

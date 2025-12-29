@@ -52,16 +52,17 @@ The backend successfully fetches and stores data from FRED and EIA APIs.
 
 ### 2. Set Up Virtual Environment
 ```bash
+# Navigate to backend folder from project root
 cd diesel-backend
 
 # Create virtual environment
 python -m venv venv
 
 # Activate it (Windows PowerShell)
-.\venv\Scripts\Activate.ps1
+venv\Scripts\activate
 
 # Or for Command Prompt
-.\venv\Scripts\activate.bat
+venv\Scripts\activate.bat
 ```
 
 ### 3. Install Dependencies
@@ -70,7 +71,7 @@ pip install -r requirements.txt
 ```
 
 ### 4. Configure API Keys
-Create a `.env` file:
+Create a `.env` file in the `diesel-backend` folder:
 ```env
 FRED_API_KEY=your_fred_key_here
 EIA_API_KEY=your_eia_key_here
@@ -89,9 +90,29 @@ python scripts/export_csv.py       # Export to CSV files
 
 ### 7. (Optional) Run the API Server
 ```bash
+# Make sure you're in diesel-backend folder and venv is activated
 uvicorn app.main:app --reload
 ```
 The API will be available at http://localhost:8000
+
+---
+
+## Running Both Frontend & Backend
+
+**Terminal 1 - Backend API:**
+```powershell
+cd diesel-backend
+venv\Scripts\activate
+uvicorn app.main:app --reload
+```
+Backend runs at http://localhost:8000
+
+**Terminal 2 - React Dashboard:**
+```powershell
+cd diesel-dashboard
+npm start
+```
+Frontend runs at http://localhost:3000
 
 ---
 

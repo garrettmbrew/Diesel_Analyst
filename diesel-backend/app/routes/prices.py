@@ -57,38 +57,62 @@ async def get_prices(
 @router.get("/latest")
 async def get_latest_prices(db: Session = Depends(get_db)):
     """
-    Get the most recent price for each series.
+    Get the most recent price for each series with change calculations.
     
-    Returns a dictionary with each series ID and its latest value.
+    Returns a dictionary with each series ID and its latest value, previous value,
+    and calculated changes.
     """
-    # SQL query to get the latest price for each series
+    # SQL query to get the latest and previous price for each series
     sql = """
-        SELECT series_id, date, value, unit, source
-        FROM prices p1
-        WHERE date = (
-            SELECT MAX(date) 
-            FROM prices p2 
-            WHERE p2.series_id = p1.series_id
+        WITH RankedPrices AS (
+            SELECT 
+                series_id, 
+                date, 
+                value, 
+                unit, 
+                source,
+                ROW_NUMBER() OVER (PARTITION BY series_id ORDER BY date DESC) as rn
+            FROM prices
         )
+        SELECT 
+            series_id,
+            MAX(CASE WHEN rn = 1 THEN date END) as latest_date,
+            MAX(CASE WHEN rn = 1 THEN value END) as latest_value,
+            MAX(CASE WHEN rn = 2 THEN value END) as previous_value,
+            MAX(CASE WHEN rn = 1 THEN unit END) as unit,
+            MAX(CASE WHEN rn = 1 THEN source END) as source
+        FROM RankedPrices
+        WHERE rn <= 2
+        GROUP BY series_id
         ORDER BY series_id
     """
     
     results = run_query(sql)
     
-    # Format as dictionary
+    # Format as dictionary with change calculations
     latest = {}
     for row in results:
+        current = row["latest_value"]
+        previous = row["previous_value"]
+        
+        # Calculate change and percent change
+        change = current - previous if previous else 0
+        change_percent = (change / previous * 100) if previous and previous != 0 else 0
+        
         latest[row["series_id"]] = {
-            "date": row["date"],
-            "value": row["value"],
+            "date": row["latest_date"],
+            "value": current,
+            "previous": previous,
+            "change": round(change, 4),
+            "changePercent": round(change_percent, 2),
             "unit": row["unit"],
             "source": row["source"],
+            # Placeholder for high/low (could calculate from last N days)
+            "high": current,  # TODO: Calculate actual high
+            "low": current,   # TODO: Calculate actual low
         }
     
-    return {
-        "latest_prices": latest,
-        "series_count": len(latest),
-    }
+    return latest
 
 
 @router.get("/series")

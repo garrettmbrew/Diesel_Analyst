@@ -75,19 +75,34 @@ async def get_inventories(
 @router.get("/latest")
 async def get_latest_inventories(db: Session = Depends(get_db)):
     """
-    Get the most recent inventory reading for each region.
+    Get the most recent inventory reading for each region with change calculations.
     
-    Returns a dictionary with each region and its latest stock level.
+    Returns a dictionary with each region and its latest stock level, previous value,
+    and calculated change.
     """
     sql = """
-        SELECT region, product, date, value, unit, source
-        FROM inventories i1
-        WHERE date = (
-            SELECT MAX(date) 
-            FROM inventories i2 
-            WHERE i2.region = i1.region
-            AND i2.product = i1.product
+        WITH RankedInventories AS (
+            SELECT 
+                region,
+                product,
+                date, 
+                value, 
+                unit, 
+                source,
+                ROW_NUMBER() OVER (PARTITION BY region, product ORDER BY date DESC) as rn
+            FROM inventories
         )
+        SELECT 
+            region,
+            product,
+            MAX(CASE WHEN rn = 1 THEN date END) as latest_date,
+            MAX(CASE WHEN rn = 1 THEN value END) as latest_value,
+            MAX(CASE WHEN rn = 2 THEN value END) as previous_value,
+            MAX(CASE WHEN rn = 1 THEN unit END) as unit,
+            MAX(CASE WHEN rn = 1 THEN source END) as source
+        FROM RankedInventories
+        WHERE rn <= 2
+        GROUP BY region, product
         ORDER BY 
             CASE region
                 WHEN 'US' THEN 0
@@ -101,21 +116,26 @@ async def get_latest_inventories(db: Session = Depends(get_db)):
     
     results = run_query(sql)
     
+    # Format as dictionary with change calculations
     latest = {}
     for row in results:
+        current = row["latest_value"]
+        previous = row["previous_value"]
+        
+        # Calculate change
+        change = current - previous if previous else 0
+        
         latest[row["region"]] = {
             "product": row["product"],
-            "date": row["date"],
-            "value": row["value"],
+            "date": row["latest_date"],
+            "value": current,
+            "previous": previous,
+            "change": round(change, 1),
             "unit": row["unit"],
             "source": row["source"],
         }
     
-    return {
-        "latest_inventories": latest,
-        "regions_count": len(latest),
-        "as_of": results[0]["date"] if results else None,
-    }
+    return latest
 
 
 @router.get("/regions")
