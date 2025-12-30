@@ -9,10 +9,17 @@ import os
 import sys
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 sys.path.insert(0, BACKEND_DIR)
 
 from dotenv import load_dotenv
-load_dotenv(os.path.join(BACKEND_DIR, ".env"), override=True)
+# Load .env - check root first, then backend folder
+root_env = os.path.join(PROJECT_ROOT, ".env")
+backend_env = os.path.join(BACKEND_DIR, ".env")
+if os.path.exists(root_env):
+    load_dotenv(root_env, override=True)
+elif os.path.exists(backend_env):
+    load_dotenv(backend_env, override=True)
 
 from app.database import run_query
 

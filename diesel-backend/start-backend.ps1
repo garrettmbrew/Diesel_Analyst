@@ -15,11 +15,23 @@ if (-not (Test-Path "venv\Scripts\activate.ps1")) {
     python -m venv venv
 }
 
-# Check if .env exists
-if (-not (Test-Path ".env")) {
-    Write-Host "WARNING: .env file not found!" -ForegroundColor Red
-    Write-Host "Create .env with your API keys before starting." -ForegroundColor Yellow
-    exit 1
+# Load environment from root .env if not already loaded
+$rootEnvFile = Join-Path (Split-Path $PSScriptRoot) ".env"
+if ((Test-Path $rootEnvFile) -and -not $env:FRED_API_KEY) {
+    Write-Host "Loading environment from root .env..." -ForegroundColor Cyan
+    Get-Content $rootEnvFile | ForEach-Object {
+        if ($_ -match '^\s*([^#][^=]+)\s*=\s*(.*)$') {
+            $name = $matches[1].Trim()
+            $value = $matches[2].Trim()
+            Set-Item -Path "env:$name" -Value $value
+        }
+    }
+}
+
+# Verify API keys are loaded
+if (-not $env:FRED_API_KEY -or -not $env:EIA_API_KEY) {
+    Write-Host "WARNING: API keys not found in environment!" -ForegroundColor Red
+    Write-Host "Make sure .env file exists in project root." -ForegroundColor Yellow
 }
 
 # Activate venv and start server

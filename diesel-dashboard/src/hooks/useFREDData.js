@@ -23,24 +23,20 @@ export const useFREDData = () => {
 
   const apiKey = process.env.REACT_APP_FRED_API_KEY;
 
-  // Fetch a single FRED series
+  // Fetch a single FRED series via backend proxy
   const fetchSeries = useCallback(async (seriesId, limit = 30) => {
-    if (!apiKey) {
-      return null;
-    }
-
+    // Always use backend proxy - no API key needed in frontend
     try {
-      const url = new URL(`${API_ENDPOINTS.FRED.BASE}${API_ENDPOINTS.FRED.SERIES}`);
-      url.searchParams.append('series_id', seriesId);
-      url.searchParams.append('api_key', apiKey);
-      url.searchParams.append('file_type', 'json');
-      url.searchParams.append('sort_order', 'desc');
-      url.searchParams.append('limit', limit.toString());
-
-      const response = await fetch(url.toString());
-      if (!response.ok) throw new Error(`FRED API error: ${response.status}`);
+      const url = `http://localhost:8000/api/fetch/fred/proxy/${seriesId}?limit=${limit}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Backend proxy error: ${response.status}`);
       
       const data = await response.json();
+      
+      if (data.success === false) {
+        throw new Error(data.error || 'Backend proxy failed');
+      }
       
       if (data.observations && data.observations.length > 0) {
         // Filter out missing values (FRED uses "." for missing)
@@ -55,15 +51,10 @@ export const useFREDData = () => {
       console.error(`FRED fetch error for ${seriesId}:`, err);
       throw err;
     }
-  }, [apiKey]);
+  }, []); // No dependency on apiKey anymore
 
   // Fetch all price data
   const fetchAllPrices = useCallback(async () => {
-    if (!apiKey) {
-      console.warn('No FRED API key configured');
-      return null;
-    }
-
     setLoading(true);
     setError(null);
 
@@ -152,27 +143,23 @@ export const useFREDData = () => {
     } finally {
       setLoading(false);
     }
-  }, [apiKey, fetchSeries]);
+  }, [fetchSeries]);
 
-  // Fetch historical data for a specific series (for charts)
+  // Fetch historical data for a specific series (for charts) via backend proxy
   const fetchHistorical = useCallback(async (seriesId, months = 24) => {
-    if (!apiKey) return null;
-    
     try {
-      // Calculate date range
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setMonth(startDate.getMonth() - months);
+      // Calculate number of observations needed (approx 30 per month for daily data)
+      const limit = months * 30;
+      const url = `http://localhost:8000/api/fetch/fred/proxy/${seriesId}?limit=${limit}`;
       
-      const url = new URL(`${API_ENDPOINTS.FRED.BASE}${API_ENDPOINTS.FRED.SERIES}`);
-      url.searchParams.append('series_id', seriesId);
-      url.searchParams.append('api_key', apiKey);
-      url.searchParams.append('file_type', 'json');
-      url.searchParams.append('observation_start', startDate.toISOString().split('T')[0]);
-      url.searchParams.append('observation_end', endDate.toISOString().split('T')[0]);
-
-      const response = await fetch(url.toString());
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Backend proxy error: ${response.status}`);
+      
       const data = await response.json();
+      
+      if (data.success === false) {
+        throw new Error(data.error || 'Backend proxy failed');
+      }
       
       if (data.observations) {
         return data.observations
@@ -180,14 +167,15 @@ export const useFREDData = () => {
           .map(obs => ({
             date: obs.date,
             value: parseFloat(obs.value),
-          }));
+          }))
+          .reverse(); // FRED returns newest first, we want oldest first for charts
       }
       return null;
     } catch (err) {
       console.error(`FRED historical fetch error:`, err);
       return null;
     }
-  }, [apiKey]);
+  }, []);
 
   // Initial fetch
   useEffect(() => {
@@ -206,7 +194,7 @@ export const useFREDData = () => {
     lastFetch,
     refresh: fetchAllPrices,
     fetchHistorical,
-    hasApiKey: !!apiKey,
+    hasApiKey: true, // Backend handles API key now
   };
 };
 

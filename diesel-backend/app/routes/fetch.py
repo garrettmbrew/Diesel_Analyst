@@ -200,6 +200,46 @@ async def fetch_status(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/fred/proxy/{series_id}")
+async def proxy_fred_series(
+    series_id: str,
+    limit: int = Query(30, ge=1, le=10000, description="Number of observations to return"),
+):
+    """
+    Proxy endpoint to fetch FRED data directly without storing.
+    This bypasses CORS issues by making the request server-side.
+    
+    Path Parameters:
+    - series_id: The FRED series ID (DCOILBRENTEU, DCOILWTICO, etc.)
+    
+    Query Parameters:
+    - limit: Number of observations to return (default 30)
+    """
+    import os
+    import httpx
+    
+    api_key = os.getenv("FRED_API_KEY")
+    if not api_key:
+        return {"success": False, "error": "FRED API key not configured"}
+    
+    url = f"https://api.stlouisfed.org/fred/series/observations"
+    params = {
+        "series_id": series_id,
+        "api_key": api_key,
+        "file_type": "json",
+        "sort_order": "desc",
+        "limit": limit,
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, timeout=10.0)
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @router.get("/sources")
 async def list_sources():
     """
